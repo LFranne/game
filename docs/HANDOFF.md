@@ -4,7 +4,7 @@ Stand: 2026-09-14. Dieses Dokument reicht aus, um ohne den bisherigen Chatverlau
 
 ## 1. Projektstand
 
-Funktionsfähiger Frontend-Prototyp: **vanilla HTML/CSS/JS, kein Build-Tool, keine npm-Dependencies, kein Backend.** `postkarte.html` lässt sich direkt im Browser öffnen.
+Funktionsfähiger Frontend-Prototyp: **vanilla HTML/CSS/JS, kein Build-Tool, keine npm-Dependencies, kein Backend.** `index.html` lässt sich direkt im Browser öffnen.
 
 Gast lädt ein Foto hoch → wählt den Bildausschnitt → tippt Empfänger, Absender und Nachricht → dreht die Karte → teilt sie als Bild.
 
@@ -105,7 +105,7 @@ Zurückgestellt, Erkenntnisse festgehalten damit sie nicht verloren gehen:
 ## 6. Relevante Dateien
 
 ```
-postkarte.html        Struktur: Vorschauspalte, Formularspalte, Zuschneide-Dialog am Body-Ende
+index.html            Startseite: Vorschauspalte, Formularspalte, Zuschneide-Dialog am Body-Ende
 postkarte.css         Marken-Tokens in :root, Flip, Dialog, Sticky-Vorschau, Teilen-Bedienung
 postkarte.js          Gesamte Logik (~990 Zeilen), Abschnitte per Kommentar getrennt
 assets/               4 Original-Logo-SVGs (wald + dust, jeweils Schriftzug und Signet)
@@ -113,8 +113,11 @@ docs/PRD.md           Vollständige Produktanforderungen
 docs/HANDOFF.md       Dieses Dokument
 docs/Ab_ins_Gruene_Brand_Guideline.pdf   Brand Book, lokal, bewusst gitignored (Repo ist öffentlich)
 
-index.html / style.css / game.js   Separates Pac-Man-Mini-Projekt. NICHT anfassen.
+postkarte.html        Nur noch eine Weiterleitung auf ./ — der Generator lag frueher hier.
+                      Entfernbar, sobald keine alten Links mehr im Umlauf sind.
 ```
+
+Das Repository hiess urspruenglich `game` und enthielt ein separates Pac-Man-Mini-Projekt (`index.html`, `style.css`, `game.js`). Das ist am 2026-09-14 geloescht worden; der Generator ist seitdem die Startseite. Der Repo-Name passt dadurch nicht mehr zum Inhalt.
 
 Orientierung in `postkarte.js`: `state` und `setPhoto()` ganz oben, dann Helfer (`coverFit`, `fitLines`, `getFrontLayout`, `getCropAspect`), dann `renderFront()`/`renderBack()`/`applyFormat()`, dann der Zuschneide-Dialog, dann Story-Format und Teilen, zuletzt Init.
 

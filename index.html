@@ -1,17 +1,123 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-    <meta charset="utf-8">
-    <title>Pac-Man</title>
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ab ins Grüne – Postkarten-Generator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Zilla+Slab:wght@400;600;700&family=Asap+Condensed:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="postkarte.css">
 </head>
 <body>
-    <div id="game-container">
-        <div id="hud">Score: <span id="score">0</span></div>
-        <div id="message" class="hidden"></div>
-        <canvas id="game-canvas"></canvas>
-        <div id="controls">Pfeiltasten zum Bewegen, R zum Neustarten</div>
+  <header class="page-header">
+    <img class="page-logo" src="assets/AIG_logotype_signet_links_dust.svg" alt="Ab ins Grüne">
+    <p class="page-tagline">Gestalte deine persönliche Urlaubspostkarte</p>
+  </header>
+
+  <main class="layout">
+    <section class="preview-column">
+      <div class="postcard-flip" id="postcard-flip">
+        <div class="postcard-flip-inner" id="postcard-flip-inner">
+          <div class="postcard-face postcard-face--front">
+            <div class="postcard-face-clip">
+              <canvas id="canvas-front" width="1697" height="1200" aria-label="Vorderseite der Postkarte"></canvas>
+            </div>
+          </div>
+          <div class="postcard-face postcard-face--back">
+            <div class="postcard-face-clip">
+              <canvas id="canvas-back" width="1697" height="1200" aria-label="Rückseite der Postkarte"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bewusst nur Karte + Umdrehen: diese Spalte klebt mobil am oberen Rand
+           (siehe postkarte.css), und position: sticky kann nur innerhalb der
+           eigenen Elternbox wandern. Alles weitere würde die angeheftete
+           Höhe aufblasen und die Formularfelder verdrängen — die
+           Teilen-Bedienung sitzt deshalb in der Formularspalte. -->
+      <div class="preview-actions">
+        <button type="button" id="btn-flip" class="btn btn-secondary">
+          <span class="btn-icon" aria-hidden="true">&#8635;</span> Karte umdrehen
+        </button>
+      </div>
+    </section>
+
+    <section class="form-column">
+      <div class="form-group">
+        <label for="photo-input" class="form-label">Dein Urlaubsfoto</label>
+        <label for="photo-input" class="upload-button">
+          <span class="btn-icon" aria-hidden="true">&#128247;</span> Foto hochladen
+        </label>
+        <input type="file" id="photo-input" accept="image/*" class="visually-hidden">
+        <button type="button" id="btn-recrop" class="btn btn-secondary form-button" hidden>
+          <span class="btn-icon" aria-hidden="true">&#9986;</span> Ausschnitt anpassen
+        </button>
+      </div>
+
+      <div class="form-group">
+        <label for="recipient-input" class="form-label">Empfänger</label>
+        <input type="text" id="recipient-input" class="form-input" placeholder="z. B. Mama &amp; Papa" maxlength="40">
+      </div>
+
+      <div class="form-group">
+        <label for="sender-input" class="form-label">Absender</label>
+        <input type="text" id="sender-input" class="form-input" placeholder="z. B. Familie M&uuml;ller" maxlength="40">
+      </div>
+
+      <div class="form-group">
+        <label for="message-input" class="form-label">Deine Nachricht</label>
+        <textarea id="message-input" class="form-textarea" rows="6" maxlength="200" placeholder="Liebe Grüße aus dem Schwarzwald ..."></textarea>
+        <p class="char-counter"><span id="char-count">0</span> / 200</p>
+      </div>
+
+      <div class="form-group share-group">
+        <span class="form-label">Teilen</span>
+
+        <div class="share-format" role="group" aria-label="Format zum Teilen">
+          <button type="button" id="fmt-both" class="share-format-option is-active" aria-pressed="true">Beide Seiten</button>
+          <button type="button" id="fmt-story" class="share-format-option" aria-pressed="false">Story 9:16</button>
+        </div>
+
+        <button type="button" id="btn-share" class="btn btn-primary share-button" disabled>
+          <span class="btn-icon" aria-hidden="true">&#8593;</span> Teilen
+        </button>
+        <p class="share-status" id="share-status" role="status" aria-live="polite"></p>
+
+      </div>
+    </section>
+  </main>
+
+  <!-- Bewusst am Ende von <body> und ausserhalb von .layout: .postcard-flip
+       setzt perspective und .postcard-flip-inner ein transform, beides erzeugt
+       einen Containing Block, in dem ein Overlay falsch sitzen wuerde.
+       Natives <dialog> + showModal() liefert Fokusfalle, Escape, Top-Layer und
+       inerten Hintergrund ohne selbstgebaute Logik. -->
+  <dialog id="crop-dialog" class="crop-dialog" aria-labelledby="crop-dialog-title">
+    <div class="crop-dialog-body">
+      <h2 id="crop-dialog-title" class="crop-dialog-title">Bildausschnitt w&auml;hlen</h2>
+
+      <div class="crop-stage" id="crop-stage">
+        <canvas id="crop-canvas" aria-label="Vorschau des gew&auml;hlten Bildausschnitts"></canvas>
+      </div>
+
+      <!-- Zoom-Slider zusaetzlich zu Mausrad/Pinch, weil ein Canvas selbst
+           nicht per Tastatur oder Screenreader bedienbar ist. -->
+      <div class="crop-zoom">
+        <label for="crop-zoom" class="crop-zoom-label">Zoom</label>
+        <input type="range" id="crop-zoom" class="crop-zoom-slider" min="1" max="4" step="0.01" value="1">
+      </div>
+
+      <p class="crop-hint">Zum Verschieben ziehen. Zum Zoomen den Regler, das Mausrad oder zwei Finger nutzen.</p>
+
+      <div class="crop-actions">
+        <button type="button" id="crop-cancel" class="btn btn-secondary">Abbrechen</button>
+        <button type="button" id="crop-confirm" class="btn btn-primary">&Uuml;bernehmen</button>
+      </div>
     </div>
-    <script src="game.js"></script>
+  </dialog>
+
+  <script src="postkarte.js"></script>
 </body>
 </html>
