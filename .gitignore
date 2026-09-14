@@ -1,0 +1,6 @@
+# Internes Markenmaterial: nicht ins Repository, da der GitHub-Remote
+# oeffentlich ist. Die Datei bleibt lokal im Ordner docs/ liegen.
+docs/Ab_ins_Gruene_Brand_Guideline.pdf
+
+# Verteil-/Sicherungsarchiv, redundant zum Quellcode
+*.zip

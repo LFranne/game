@@ -1,0 +1,461 @@
+/* ============================================================
+   Ab ins Grüne – Marken-Tokens
+   Quelle: Ab_ins_Gruene_Brand_Guideline.pdf (Stand 27.08.2026)
+   Logo-Dateien liegen unverändert in /assets (Original-SVG).
+   ============================================================ */
+:root {
+  --c-wald: #253C28;
+  --c-wald2: #4A613C;
+  --c-wald3: #7C8E51;
+  --c-fichte: #BBD034;
+  --c-graphite: #202829;
+  --c-dust: #F2EFED;
+  --c-white: #FFFFFF;
+  --c-gold: #A17621;
+  --c-gold2: #D4A12C;
+  --c-gold3: #FFD962;
+
+  --font-heading: 'Zilla Slab', Georgia, 'Iowan Old Style', serif;
+  --font-body: 'Asap Condensed', 'Segoe UI', system-ui, sans-serif;
+
+  --radius: 10px;
+  --shadow-card: 0 12px 30px rgba(37, 60, 40, 0.25);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--c-wald3);
+  background: linear-gradient(180deg, var(--c-wald) 0%, var(--c-wald2) 45%, var(--c-wald3) 100%);
+  min-height: 100vh;
+  font-family: var(--font-body);
+  color: var(--c-graphite);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ---------------- Header ---------------- */
+.page-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1.75rem 1rem 1.25rem;
+  text-align: center;
+}
+
+.page-logo {
+  height: 56px;
+  width: auto;
+}
+
+.page-tagline {
+  margin: 0;
+  color: var(--c-dust);
+  font-family: var(--font-heading);
+  font-size: 1.05rem;
+  letter-spacing: 0.01em;
+}
+
+/* ---------------- Layout ---------------- */
+.layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2rem;
+  padding: 0 1rem 3rem;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.preview-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 420px;
+}
+
+.form-column {
+  width: 100%;
+  max-width: 420px;
+  background: var(--c-dust);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  box-shadow: var(--shadow-card);
+}
+
+@media (min-width: 900px) {
+  .layout {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: center;
+  }
+}
+
+/* ---------------- Postcard flip ---------------- */
+.postcard-flip {
+  width: 100%;
+  perspective: 1800px;
+  cursor: pointer;
+}
+
+.postcard-flip-inner {
+  position: relative;
+  width: 100%;
+  /* Default (Querformat); wird von applyFormat() in postkarte.js dynamisch
+     per Inline-Style auf das tatsächlich gewählte Kartenformat gesetzt. */
+  aspect-ratio: 1697 / 1200;
+  transform-style: preserve-3d;
+  -webkit-transform-style: preserve-3d;
+  transition: transform 0.7s cubic-bezier(0.4, 0.2, 0.2, 1);
+  /* Hier bewusst KEIN filter/opacity/mask: das sind Grouping-Properties, die
+     den preserve-3d-Kontext abflachen. Ein filter: drop-shadow() an dieser
+     Stelle hat genau das getan — dadurch wurde beim Umdrehen die gespiegelte
+     Vorderseite statt der Rückseite angezeigt. Der Kartenschatten liegt
+     deshalb als box-shadow auf .postcard-face-clip. */
+}
+
+.postcard-flip-inner.is-flipped {
+  transform: rotateY(180deg);
+  -webkit-transform: rotateY(180deg);
+}
+
+/* backface-visibility + 3D-Rotation leben auf diesem Element; der visuelle
+   Zuschnitt (border-radius/overflow) lebt auf .postcard-face-clip darunter.
+   Getrennt, weil WebKit/Safari backface-visibility unzuverlässig ignoriert,
+   wenn overflow:hidden auf demselben Element wie ein 3D-transform sitzt —
+   das erzeugte den "gespiegelte Rückseite"-Bug. */
+.postcard-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.postcard-face--back {
+  transform: rotateY(180deg);
+  -webkit-transform: rotateY(180deg);
+}
+
+.postcard-face-clip {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius);
+  overflow: hidden;
+  /* Kartenschatten: siehe Hinweis bei .postcard-flip-inner — als box-shadow
+     pro Kartenseite, weil ein filter auf dem 3D-Container den Flip zerstört.
+     overflow:hidden beschneidet nur Kinder, nicht den eigenen Schatten. */
+  box-shadow: var(--shadow-card);
+}
+
+.postcard-face canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius);
+}
+
+/* Klebende Vorschau — nur einspaltig (unterhalb des 900px-Umbruchs). Im
+   Desktop-Zweispalter steht die Vorschau ohnehin permanent neben dem
+   Formular. Die Referenz (wishpost.one) lässt ihre klebende Vorschau 63–78 %
+   der Viewporthöhe belegen; hier deshalb auf 50vh begrenzt, damit darunter
+   genug Platz für die Bedienelemente bleibt. */
+@media (max-width: 899px) {
+  .preview-column {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    /* Volle Breite trotz des 1rem-Paddings von .layout, damit beim Scrollen
+       nichts unter der klebenden Vorschau durchscheint. */
+    width: calc(100% + 2rem);
+    max-width: none;
+    margin: 0 -1rem;
+    padding: 0.75rem 1rem;
+    background: var(--c-wald2);
+    box-shadow: 0 8px 18px rgba(37, 60, 40, 0.3);
+  }
+
+  /* Höhenbegrenzung der Karte. --card-aspect wird von applyFormat() gesetzt,
+     damit Quer- und Hochformat dieselbe Maximalhöhe einhalten. */
+  .postcard-flip {
+    width: min(100%, calc(50vh * var(--card-aspect, 1.414)));
+  }
+}
+
+/* ---------------- Buttons ---------------- */
+.preview-actions {
+  display: flex;
+  gap: 0.75rem;
+  width: 100%;
+  margin-top: 1.25rem;
+}
+
+.btn {
+  flex: 1;
+  min-height: 48px;
+  border: none;
+  border-radius: var(--radius);
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 1rem;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.btn:active {
+  transform: scale(0.97);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--c-fichte);
+  color: var(--c-graphite);
+}
+
+.btn-secondary {
+  background: var(--c-dust);
+  color: var(--c-wald);
+}
+
+.btn-icon {
+  font-size: 1.1rem;
+}
+
+.share-status {
+  min-height: 1.25rem;
+  margin: 0.6rem 0 0;
+  color: var(--c-wald2);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+/* ---------------- Teilen ---------------- */
+.share-format {
+  display: flex;
+  gap: 0.35rem;
+  width: 100%;
+  margin-top: 0;
+  padding: 0.25rem;
+  background: rgba(37, 60, 40, 0.08);
+  border-radius: var(--radius);
+}
+
+.share-format-option {
+  flex: 1;
+  min-height: 40px;
+  border: none;
+  border-radius: calc(var(--radius) - 3px);
+  background: transparent;
+  color: var(--c-wald2);
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 0.92rem;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.share-format-option.is-active {
+  background: var(--c-white);
+  color: var(--c-wald);
+  box-shadow: 0 1px 3px rgba(37, 60, 40, 0.18);
+}
+
+.share-format-option:focus-visible {
+  outline: 2px solid var(--c-fichte);
+  outline-offset: 2px;
+}
+
+/* Primaerer Teilen-Button sitzt jetzt in der Formularspalte. */
+.share-button {
+  width: 100%;
+  margin-top: 0.55rem;
+}
+
+/* ---------------- Form ---------------- */
+.form-group {
+  margin-bottom: 1.25rem;
+}
+
+.form-group:last-child {
+  margin-bottom: 0;
+}
+
+.form-label {
+  display: block;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--c-wald);
+  margin-bottom: 0.4rem;
+}
+
+.upload-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  padding: 0 1rem;
+  background: var(--c-wald);
+  color: var(--c-white);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-weight: 600;
+  width: 100%;
+  justify-content: center;
+}
+
+.upload-button:active {
+  transform: scale(0.98);
+}
+
+.form-input,
+.form-textarea {
+  width: 100%;
+  min-height: 44px;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--c-wald3);
+  border-radius: var(--radius);
+  font-family: var(--font-body);
+  font-size: 1rem;
+  color: var(--c-graphite);
+  background: var(--c-white);
+  resize: vertical;
+}
+
+.form-input:focus,
+.form-textarea:focus {
+  outline: 2px solid var(--c-fichte);
+  outline-offset: 1px;
+}
+
+.char-counter {
+  margin: 0.35rem 0 0;
+  text-align: right;
+  font-size: 0.85rem;
+  color: var(--c-wald2);
+}
+
+/* ---------------- Zuschneide-Dialog ---------------- */
+/* Muss !important sein: .btn setzt display: inline-flex und würde das
+   hidden-Attribut sonst überschreiben. */
+[hidden] {
+  display: none !important;
+}
+
+.crop-dialog {
+  width: 100%;
+  max-width: min(560px, calc(100vw - 2rem));
+  padding: 0;
+  border: none;
+  border-radius: var(--radius);
+  background: var(--c-dust);
+  color: var(--c-graphite);
+  box-shadow: var(--shadow-card);
+}
+
+.crop-dialog::backdrop {
+  background: rgba(32, 40, 41, 0.65);
+}
+
+.crop-dialog-body {
+  padding: 1.25rem;
+}
+
+.crop-dialog-title {
+  margin: 0 0 0.85rem;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 1.15rem;
+  color: var(--c-wald);
+}
+
+.crop-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--c-graphite);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+#crop-canvas {
+  display: block;
+  cursor: grab;
+  /* Zwingend: ohne touch-action: none scrollt auf dem Smartphone die Seite
+     beim Ziehen und zoomt beim Pinchen — die Funktion wäre für die
+     Hauptzielgruppe unbenutzbar. */
+  touch-action: none;
+}
+
+#crop-canvas:active {
+  cursor: grabbing;
+}
+
+.crop-zoom {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.crop-zoom-label {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--c-wald);
+}
+
+.crop-zoom-slider {
+  flex: 1;
+  min-height: 44px;
+  accent-color: var(--c-wald2);
+}
+
+.crop-hint {
+  margin: 0.5rem 0 0;
+  font-size: 0.9rem;
+  color: var(--c-wald2);
+}
+
+.crop-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+
+/* .btn-secondary ist dust-farben — auf dem dust-farbenen Dialog-/Formulargrund
+   sonst unsichtbar. */
+.crop-actions .btn-secondary,
+.form-button {
+  background: var(--c-white);
+  border: 1px solid var(--c-wald3);
+}
+
+.form-button {
+  width: 100%;
+  margin-top: 0.6rem;
+}
