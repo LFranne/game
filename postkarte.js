@@ -21,9 +21,9 @@ const LOGO_SIGNET_RATIO = 122.46 / 103;
 // darunter, sondern nur noch das Bild. Zwei Motive sind hoch-, zwei
 // querformatig; deshalb wird jedes Motiv per "contain" in den Markenplatz
 // eingepasst statt auf feste Masse gezogen (siehe drawStamp).
-// Die Dateien liegen bewusst nicht im Repository (.gitignore). Fehlen sie,
-// bleibt stampImages[...] null und es wird die gezeichnete Signet-Marke
-// verwendet — der Generator funktioniert also auch ohne sie.
+// Laedt eine Datei nicht, bleibt stampImages[...] null und es wird die
+// gezeichnete Signet-Marke verwendet — der Generator funktioniert also auch
+// ohne die Motive.
 const STAMPS = [
   { id: 'bad-wildbad',    label: 'Bad Wildbad',    src: 'assets/AIG_marke_bad_wildbad.webp' },
   { id: 'hasen',          label: 'Hasen',          src: 'assets/AIG_marke_hasen.webp' },
