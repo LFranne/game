@@ -1,6 +1,8 @@
 # Handoff: „Ab ins Grüne" – Postkarten-Generator
 
-Stand: 2026-09-14. Dieses Dokument reicht aus, um ohne den bisherigen Chatverlauf weiterzuarbeiten.
+Stand: 2026-09-18. Dieses Dokument reicht aus, um ohne den bisherigen Chatverlauf weiterzuarbeiten.
+
+**Live unter https://lfranne.github.io/game/** (GitHub Pages aus `master`).
 
 ## 1. Projektstand
 
@@ -13,11 +15,14 @@ Fertig und im Browser gegengeprüft:
 - **Foto-Upload mit Zuschneide-Dialog** (Ziehen, Zoom per Mausrad/Pinch/Slider, Abbrechen stellt den Zustand davor vollständig wieder her, nachträglich änderbar über „Ausschnitt anpassen")
 - **Adaptives Kartenformat**, quer oder hoch, anhand des Fotoverhältnisses
 - **Empfänger** und **Absender** (je `maxlength="40"`), **Nachricht** (200 Zeichen mit Zähler) — alle mit Überlaufsicherung, Text kann nie über den Kartenrand laufen
+- **Briefmarken-Auswahl**: vier gestaltete Motive, Auswahl über Bildkacheln in der Formularspalte
 - **Vorder-/Rückseite** mit CSS-3D-Flip
-- **Teilen** über genau einen Button: `navigator.share` mit Datei, sonst Download. Zwei Formate wählbar: „Beide Seiten" (1697×2440) oder **„Story 9:16"** (1080×1920, für Instagram Story und WhatsApp-Status)
+- **Teilen** über genau einen Button: `navigator.share` mit Datei, sonst Download. Zwei Formate wählbar: „Beide Seiten" (2880×4112) oder **„Story 9:16"** (2700×4800, für Instagram Story und WhatsApp-Status)
 - **Klebende Kartenvorschau** auf dem Smartphone, damit die Karte beim Tippen sichtbar bleibt
 
-**Git:** Branch `postkarten-generator`, Commit `16321ad`. **Nichts gepusht.** Der Remote `github.com/LFranne/game` ist **öffentlich** — vor einem Push Sichtbarkeit klären. Die frühere, deutlich längere Fassung dieses Dokuments steckt in genau diesem Commit, falls Details zur Historie gebraucht werden.
+**Git:** Branch `master`, Commit `cfb6300`, **gepusht und live**. Der Remote `github.com/LFranne/game` ist **öffentlich**; die Veröffentlichung ist bewusst erfolgt. Frühere Fassungen dieses Dokuments stecken in `16321ad` und `efbfdf6`, falls Details zur Historie gebraucht werden.
+
+**Vorsicht beim Nachprüfen:** GitHub Pages liefert mit `Cache-Control: max-age=600`. Nach einem Push zeigt der Browser bis zu zehn Minuten die alte Fassung — mit Strg+F5 neu laden, sonst diagnostiziert man am falschen Stand. Eine Query an die HTML-Adresse hängen hilft **nicht**, weil `postkarte.js` ohne Query eingebunden ist und aus seinem eigenen Cache-Eintrag kommt.
 
 ## 2. Getroffene Entscheidungen
 
@@ -26,7 +31,9 @@ Fertig und im Browser gegengeprüft:
 - Kein Login, keine Datenbank, kein Backend, keine Speicherung vergangener Karten (so im PRD festgelegt).
 - **Absender-Feld** erweitert den PRD-Scope bewusst und ist entschieden — nicht erneut hinterfragen.
 - **Teilen per Link** (Empfänger öffnet eine Seite und dreht die Karte selbst) ist besprochen und **auf Phase 2 vertagt**, siehe Abschnitt 5.
-- Gebaut und **auf Nutzerwunsch wieder entfernt**: Sticker, drei Briefmarken-Varianten, WhatsApp-/E-Mail-Buttons, ein separater „Bild speichern"-Button. Nicht ungefragt neu bauen.
+- Gebaut und **auf Nutzerwunsch wieder entfernt**: Sticker, WhatsApp-/E-Mail-Buttons, ein separater „Bild speichern"-Button. Nicht ungefragt neu bauen.
+- **Briefmarken-Auswahl ist ausdrücklich gewünscht und bleibt.** Achtung, Stolperfalle in der Historie: In einer früheren Iteration wurden drei Briefmarken-Varianten gebaut und auf Wunsch wieder entfernt. Die heutigen vier sind etwas anderes — **von Franziska selbst gestaltete Bilddateien**, am 2026-09-18 auf ausdrücklichen Wunsch eingebaut. Nicht mit der alten Entfernung verwechseln.
+- Die vier Motive **liegen im Repository** (`assets/AIG_marke_*.webp`). Die Rechtefrage ist geklärt: Franziska hat sie selbst erstellt. Eine frühere `.gitignore`-Ausnahme dafür ist wieder entfernt.
 
 **Marke** (verbindlich, Quelle: `Ab_ins_Gruene_Brand_Guideline.pdf`, liegt lokal in `docs/`, ist bewusst gitignored)
 
@@ -70,10 +77,22 @@ Das hier sind die nicht offensichtlichen Stellen. Wer sie übersieht, baut funkt
 - **Media Queries erhöhen die Spezifität nicht.** Der Sticky-Block muss in `postkarte.css` **nach** `.postcard-flip { width: 100% }` stehen, sonst ist die Höhenbegrenzung wirkungslos.
 - `position: sticky` kann nur innerhalb der **eigenen Elternbox** wandern. Alles, was nicht mitkleben soll, muss die Vorschauspalte wirklich verlassen — deshalb sitzt die Teilen-Bedienung in der Formularspalte. Aktuell belegt die klebende Spalte 41 % (quer) bzw. 61 % (hoch) der Viewporthöhe bei 375×812; darüber wird es eng.
 - `[hidden] { display: none !important; }` ist nötig, weil `.btn { display: inline-flex }` das Attribut sonst überschreibt.
-- **Das untere Marken-Band ist unsichtbar:** es wird mit `COLORS.dust` gefüllt, derselben Farbe wie der Kartenhintergrund. Optisch sichtbar ist die Fläche vom Fotorahmen bis zur Kartenunterkante. Logo und Grußtext werden deshalb in `h - bandY` zentriert, **nicht** in `bandHeight`. Dieselbe Falle: eine helle Briefmarke bräuchte zwingend eine Kontur, sonst verschwindet die Perforation.
+- **Das untere Marken-Band ist unsichtbar:** es wird mit `COLORS.dust` gefüllt, derselben Farbe wie der Kartenhintergrund. Optisch sichtbar ist die Fläche vom Fotorahmen bis zur Kartenunterkante. Logo und Grußtext werden deshalb in `h - bandY` zentriert, **nicht** in `bandHeight`. Dieselbe Falle ist bei den Briefmarken eingetreten: Die Motive „Hasen" und „Wasserrad" hatten weiße bzw. cremefarbene Flächen ohne Alphakanal und mussten freigestellt werden. Das Motiv „Wasserrad" bleibt auch freigestellt das schwächste der vier — seine Grundfläche ist so hell, dass es sich auf dem Dust-Grund kaum als eigenes Objekt absetzt.
+
+**Briefmarken**
+
+- Die vier Motive **bringen ihren Zackenrand selbst mit** und sind freigestellt. `drawStamp()` (goldenes Rechteck + Signet) läuft deshalb nur noch als **Rückfall**, wenn eine Datei nicht lädt — dann verschwindet auch die Auswahlgruppe. Der Generator funktioniert ohne die Dateien.
+- Zwei Motive sind hoch-, zwei querformatig. `drawStampArt()` passt jedes per **„contain"** in den Markenplatz ein und **gibt die belegte Höhe zurück**; der Adressblock richtet sich daran aus. Bei fester Höhe wäre die Sommerbergbahn-Marke 660 px breit geworden und über die Trennlinie ins Nachrichtenfeld gelaufen.
+- **Die Motive werden einzeln geladen** (bewusst kein `Promise.all`), damit eine fehlende Datei die übrigen nicht mitreißt. Daraus folgt eine Falle, die schon einmal zugeschlagen hat: In `updateStampOptions()` muss **„noch nicht geladen" (`undefined`) von „fehlgeschlagen" (`null`) unterschieden** werden. Eine bloße Falsy-Prüfung greift beim ersten eintreffenden Motiv, weil alle anderen dann noch `undefined` sind — die Voreinstellung wird dadurch zufällig das zuerst geladene Motiv. Lokal unsichtbar, live beim ersten Aufruf mit kaltem Cache sofort da.
+- Aufbereitung der Dateien: „Hasen" und „Wasserrad" hatten **keinen Alphakanal** (weißer bzw. cremefarbener Hintergrund) und wurden per Flood-Fill vom Rand freigestellt — sonst säße ein heller Kasten auf dem Dust-Grund und der Zackenrand wäre zunichte. Alle vier als WebP, Qualität 92, maximal 1400 px Kantenlänge: 1,03 MB statt 8,1 MB als PNG, bei Kartengröße nicht vom Original zu unterscheiden. Die Kantenlänge liegt bewusst über der maximalen Zeichengröße von 749 px, damit beim Verkleinern Reserve bleibt.
 
 **Canvas und Export**
 
+- **`imageSmoothingQuality` steht per Vorgabe auf `'low'`** — ein billiger Filter, der bei jedem Verkleinern Detail kostet: Urlaubsfoto auf Kartenbreite, Markenmotiv, Story-Export. `setHighQuality(ctx)` setzt ihn auf `'high'` und muss **am Anfang jeder Zeichenfunktion** stehen, nicht einmalig im Init: Das Setzen von `canvas.width` setzt den gesamten Kontextzustand zurück, also auch diese Einstellung.
+- **Auflösungsgrenze ist der gestapelte Export.** Karte 2880×2036 ergibt „Beide Seiten" mit 2880×4112 = 11,8 MP. Darüber wird es riskant: **iOS Safari begrenzt Canvas auf rund 16,7 MP** und liefert darüber ohne Fehlermeldung ein leeres Canvas. Die Renderzeit ist kein Argument dagegen (gemessen 0,1–0,2 ms pro Rückseite) — die Grenze ist allein der Speicher.
+- **Die Story zeichnet die Karten in Zielgröße neu**, statt die fertigen Vorschau-Canvases zu verkleinern. Dafür nehmen `renderFrontTo(canvas, ctx)` und `renderBackTo(canvas, ctx)` ein beliebiges Ziel entgegen; `renderCardAt()` legt das Offscreen-Canvas an. Vorher wurde jedes Element zweimal resampled (Foto → Karte → Story, Marke 1400 → 749 → 597) — sichtbar weich bei Text und Markenbeschriftung.
+- **Die Markengröße in der Story hängt allein von `STORY.width` ab**, nicht von der Kartenauflösung: rund 22 % davon (0,26 Kartenanteil × 0,85 Rahmenanteil). Wer dort schärfer werden will, muss den **Rahmen** vergrößern — die Karte höher aufzulösen bringt nichts. Genau das hat einen Anlauf gekostet.
+- Eine **1:1-Platzierung der Karte in der Story ist nicht möglich**: dafür müsste der Rahmen rund 3400 px breit sein und läge bei über 20 MP. Bei 2700×4800 wird die Karte auf 90 % skaliert — praktisch verlustfrei — und das Bild bleibt mit 13,0 MP unter der iOS-Grenze.
 - Die Logo-SVGs haben **kein** `width`/`height`, nur ein `viewBox`. `naturalWidth` ist damit browserabhängig unzuverlässig — die Seitenverhältnisse sind als `LOGO_FULL_RATIO = 559/103` und `LOGO_SIGNET_RATIO = 122.46/103` fest codiert. Bei Logo-Austausch mit anpassen.
 - `document.fonts.ready.then(() => renderAll())` am Dateiende ist nötig: Canvas-Text wartet nicht auf Web-Fonts und würde sonst mit Fallback-Metriken umbrechen.
 - `buildStoryCanvas()` nutzt **nicht** `buildCombinedCanvas()` — dessen wald-farbene Fläche läge als dunkler Kasten auf dem Verlauf. Es zeichnet Vorder- und Rückseite direkt auf den Verlauf.
@@ -89,8 +108,9 @@ Das hier sind die nicht offensichtlichen Stellen. Wer sie übersieht, baut funkt
 1. **Gerätetest** auf echtem iOS Safari und Android Chrome: Pinch und Ziehen im Zuschneide-Dialog, Escape, Web Share.
 2. **EXIF-Orientierung** von iPhone-Fotos wird nicht ausgewertet. Betrifft schon den heutigen Code, wird durch den Zuschnitt aber erstmals sichtbar.
 3. **Kontrast prüfen:** Logo und Grußtext auf sehr hellen und sehr dunklen Fotos — nie verifiziert.
-4. **Story im Hochformat:** die zwei gestapelten Karten belegen nur ~50 % der Story-Breite, der Nachrichtentext wird auf dem Handy klein. Zwei Hochkant-Karten übereinander sind in 9:16 zwangsläufig sehr hoch — bräuchte ein eigenes Story-Layout, nicht nur einen anderen Skalierungsfaktor.
-5. **Push-Entscheidung:** Repo ist öffentlich, Commit liegt nur lokal.
+4. **Story im Hochformat:** die zwei gestapelten Karten belegen nur ~50 % der Story-Breite, der Nachrichtentext wird auf dem Handy klein. Zwei Hochkant-Karten übereinander sind in 9:16 zwangsläufig sehr hoch — bräuchte ein eigenes Story-Layout, nicht nur einen anderen Skalierungsfaktor. Die Auflösungsarbeit vom 2026-09-18 hat daran nichts geändert, sie betraf die Schärfe, nicht die Aufteilung.
+5. **Story bleibt naturgemäß etwas hinter „Beide Seiten" zurück:** die Karte ist dort 2295 px breit statt 2880. Reine Geometrie — eine querformatige Karte in einem hochformatigen Rahmen. Nur über ein eigenes Story-Layout zu verbessern (siehe Punkt 4).
+6. **Dritte Teilen-Option „nur diese Seite"** wäre der Weg zu spürbar mehr Auflösung: ohne den Stapel könnte eine einzelne Karte deutlich höher aufgelöst werden, ohne an die iOS-Canvas-Grenze zu stoßen. Besprochen, bewusst nicht gebaut.
 
 ## 5. Phase 2: Teilen per Link
 
@@ -107,8 +127,9 @@ Zurückgestellt, Erkenntnisse festgehalten damit sie nicht verloren gehen:
 ```
 index.html            Startseite: Vorschauspalte, Formularspalte, Zuschneide-Dialog am Body-Ende
 postkarte.css         Marken-Tokens in :root, Flip, Dialog, Sticky-Vorschau, Teilen-Bedienung
-postkarte.js          Gesamte Logik (~990 Zeilen), Abschnitte per Kommentar getrennt
+postkarte.js          Gesamte Logik (~1180 Zeilen), Abschnitte per Kommentar getrennt
 assets/               4 Original-Logo-SVGs (wald + dust, jeweils Schriftzug und Signet)
+                      + 4 Briefmarken-Motive AIG_marke_*.webp (siehe Abschnitt 3)
 docs/PRD.md           Vollständige Produktanforderungen
 docs/HANDOFF.md       Dieses Dokument
 docs/Ab_ins_Gruene_Brand_Guideline.pdf   Brand Book, lokal, bewusst gitignored (Repo ist öffentlich)
@@ -119,7 +140,7 @@ postkarte.html        Nur noch eine Weiterleitung auf ./ — der Generator lag f
 
 Das Repository hiess urspruenglich `game` und enthielt ein separates Pac-Man-Mini-Projekt (`index.html`, `style.css`, `game.js`). Das ist am 2026-09-14 geloescht worden; der Generator ist seitdem die Startseite. Der Repo-Name passt dadurch nicht mehr zum Inhalt.
 
-Orientierung in `postkarte.js`: `state` und `setPhoto()` ganz oben, dann Helfer (`coverFit`, `fitLines`, `getFrontLayout`, `getCropAspect`), dann `renderFront()`/`renderBack()`/`applyFormat()`, dann der Zuschneide-Dialog, dann Story-Format und Teilen, zuletzt Init.
+Orientierung in `postkarte.js`: `STAMPS`, `state` und `setPhoto()` ganz oben, dann Helfer (`coverFit`, `fitLines`, `setHighQuality`, `getFrontLayout`, `getCropAspect`), dann `drawStampArt()`/`drawStamp()`, dann `renderFrontTo()`/`renderBackTo()` mit den Hüllen `renderFront()`/`renderBack()` und `applyFormat()`, dann `updateStampOptions()`/`selectStamp()`, dann der Zuschneide-Dialog, dann `renderCardAt()`/`buildStoryCanvas()`/`buildCombinedCanvas()` und Teilen, zuletzt Init.
 
 ## 7. Arbeitsweise des Nutzers
 
