@@ -570,7 +570,15 @@ function updateStampOptions() {
 
   // Faellt das aktive Motiv aus, auf das erste verfuegbare wechseln, damit
   // nie eine Auswahl markiert ist, die es nicht gibt.
-  if (verfuegbar > 0 && !stampImages[state.stamp]) {
+  // Wichtig ist die Unterscheidung zwischen "fehlgeschlagen" und "noch nicht
+  // geladen": die Motive treffen einzeln und in unvorhersehbarer Reihenfolge
+  // ein. Eine blosse Falsy-Pruefung wuerde beim ersten eintreffenden Motiv
+  // zuschlagen, weil die uebrigen zu dem Zeitpunkt noch undefined sind — die
+  // Voreinstellung waere dann zufaellig das zuerst geladene Motiv statt des
+  // ersten aus STAMPS. Fehlgeschlagen ist nur, was explizit auf null steht.
+  const aktivesFehlgeschlagen =
+    Object.prototype.hasOwnProperty.call(stampImages, state.stamp) && !stampImages[state.stamp];
+  if (verfuegbar > 0 && aktivesFehlgeschlagen) {
     const ersatz = STAMPS.find(s => stampImages[s.id]);
     if (ersatz) {
       state.stamp = ersatz.id;
