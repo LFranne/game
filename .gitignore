@@ -4,3 +4,9 @@ docs/Ab_ins_Gruene_Brand_Guideline.pdf
 
 # Verteil-/Sicherungsarchiv, redundant zum Quellcode
 *.zip
+
+# Briefmarken-Motive: vorerst nur lokal, bis ueber die Veroeffentlichung
+# entschieden ist (oeffentlicher Remote, bei den Foto-Motiven ggf.
+# Bildrechte Dritter). renderBack() faellt ohne diese Dateien automatisch
+# auf die gezeichnete Signet-Marke zurueck.
+assets/AIG_marke_*.webp

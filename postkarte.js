@@ -16,6 +16,21 @@ const LOGO_FULL_DUST_SRC = 'assets/AIG_logotype_signet_links_dust.svg';
 const LOGO_FULL_RATIO = 559 / 103;
 const LOGO_SIGNET_RATIO = 122.46 / 103;
 
+// Briefmarken-Motive. Die Dateien bringen ihren Zackenrand selbst mit und
+// sind freigestellt — drawStamp() zeichnet deshalb keinen goldenen Rahmen
+// darunter, sondern nur noch das Bild. Zwei Motive sind hoch-, zwei
+// querformatig; deshalb wird jedes Motiv per "contain" in den Markenplatz
+// eingepasst statt auf feste Masse gezogen (siehe drawStamp).
+// Die Dateien liegen bewusst nicht im Repository (.gitignore). Fehlen sie,
+// bleibt stampImages[...] null und es wird die gezeichnete Signet-Marke
+// verwendet — der Generator funktioniert also auch ohne sie.
+const STAMPS = [
+  { id: 'bad-wildbad',    label: 'Bad Wildbad',    src: 'assets/AIG_marke_bad_wildbad.webp' },
+  { id: 'hasen',          label: 'Hasen',          src: 'assets/AIG_marke_hasen.webp' },
+  { id: 'sommerbergbahn', label: 'Sommerbergbahn', src: 'assets/AIG_marke_sommerbergbahn.webp' },
+  { id: 'wasserrad',      label: 'Wasserrad',      src: 'assets/AIG_marke_wasserrad.webp' }
+];
+
 const COLORS = {
   wald: '#253C28',
   wald2: '#4A613C',
@@ -33,8 +48,17 @@ const COLORS = {
 // des beliebigen Seitenverhältnisses des Originalfotos. Vorder- und
 // Rückseite werden immer gemeinsam über applyFormat() gesetzt.
 const FORMATS = {
-  landscape: { width: 1697, height: 1200 },
-  portrait: { width: 1200, height: 1697 }
+  // 1,7x der urspruenglichen 1697x1200. Die gesamte Layout-Mathematik rechnet
+  // in Anteilen von canvas.width/height, deshalb aendert eine hoehere
+  // Aufloesung nichts am Aussehen — nur der Export gewinnt Detail. Noetig
+  // wurde das durch die Briefmarken-Motive: deren Beschriftung war im
+  // heruntergeladenen PNG beim Hineinzoomen nicht mehr aufzuloesen.
+  // Obergrenze ist der gestapelte Export (Vorder- + Rueckseite in einem Bild):
+  // 2880x4112 sind 11,8 Megapixel und lassen Luft zur Canvas-Grenze von iOS
+  // Safari (16,7 MP), ab der ein Canvas ohne Fehlermeldung leer bleibt.
+  // Die Renderzeit spielt keine Rolle (gemessen 0,1–0,2 ms pro Rueckseite).
+  landscape: { width: 2880, height: 2036 },
+  portrait: { width: 2036, height: 2880 }
 };
 const SQUARE_TOLERANCE = 0.08; // Fotos bis ~8% "höher als breit" zählen noch als Querformat
 
@@ -56,7 +80,10 @@ const state = {
   senderName: '',
   message: '',
   side: 'front',
-  format: null
+  format: null,
+  // id aus STAMPS. Startwert ist das erste Motiv; faellt auf die gezeichnete
+  // Signet-Marke zurueck, wenn die Bilddatei nicht geladen werden konnte.
+  stamp: STAMPS[0].id
 };
 
 // Einzige Schreibstelle für photo + crop — erzwingt die Invariante oben.
@@ -66,6 +93,8 @@ function setPhoto(img, crop) {
 }
 
 const logos = { full: null, signet: null, fullDust: null };
+// id -> Image, oder null wenn die Datei fehlt/nicht geladen werden konnte.
+const stampImages = {};
 
 // ---------------- DOM refs ----------------
 const canvasFront = document.getElementById('canvas-front');
@@ -89,6 +118,8 @@ const messageInput = document.getElementById('message-input');
 const charCount = document.getElementById('char-count');
 
 const btnRecrop = document.getElementById('btn-recrop');
+const stampGroup = document.getElementById('stamp-group');
+const stampChoices = [...document.querySelectorAll('.stamp-choice')];
 const cropDialog = document.getElementById('crop-dialog');
 const cropStage = document.getElementById('crop-stage');
 const cropCanvas = document.getElementById('crop-canvas');
@@ -178,6 +209,18 @@ function fitLines(ctx, text, maxWidth, maxLines, firstLineWidth) {
   return lines;
 }
 
+// Canvas-Standard fuer imageSmoothingQuality ist 'low' — ein billiger Filter,
+// der beim Verkleinern sichtbar Detail kostet. Genau das passiert hier
+// staendig: das Urlaubsfoto (oft 4000px breit) auf Kartenbreite, das
+// Briefmarken-Motiv von 1400 auf rund 750, und im Story-Export die komplette
+// Karte. Muss nach jedem Setzen von canvas.width erneut gesetzt werden, weil
+// eine Groessenaenderung den gesamten Kontextzustand zuruecksetzt — deshalb
+// steht der Aufruf am Anfang jeder Zeichenfunktion, nicht einmalig im Init.
+function setHighQuality(ctx) {
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+}
+
 function clamp(value, lo, hi) {
   return value < lo ? lo : value > hi ? hi : value;
 }
@@ -249,6 +292,26 @@ function drawRoundedRect(ctx, x, y, w, h, r) {
 }
 
 // Briefmarke mit gezacktem Rand
+// Zeichnet das gewaehlte Briefmarken-Motiv rechtsbuendig oben in den
+// uebergebenen Platz und liefert die tatsaechlich belegte Hoehe zurueck —
+// der Adressblock darunter richtet sich daran aus.
+// x/y/w/h beschreiben den maximal verfuegbaren Platz, nicht die Zielmasse:
+// Das Motiv wird per "contain" eingepasst, damit die querformatigen Marken
+// nicht ueber die gestrichelte Trennlinie ins Nachrichtenfeld laufen (bei
+// gleichbleibender Hoehe waere die Sommerbergbahn-Marke 660px breit und
+// haette die Linie um rund 15px ueberschritten).
+function drawStampArt(ctx, img, x, y, w, h) {
+  const ratio = img.naturalWidth / img.naturalHeight;
+  let drawW = w;
+  let drawH = w / ratio;
+  if (drawH > h) {
+    drawH = h;
+    drawW = h * ratio;
+  }
+  ctx.drawImage(img, x + (w - drawW), y, drawW, drawH);
+  return drawH;
+}
+
 function drawStamp(ctx, x, y, w, h) {
   const bite = 7;
   ctx.save();
@@ -279,60 +342,61 @@ function drawStamp(ctx, x, y, w, h) {
 }
 
 // ---------------- Rendering ----------------
-function renderFront() {
-  const w = canvasFront.width;
-  const h = canvasFront.height;
-  ctxFront.clearRect(0, 0, w, h);
+function renderFrontTo(canvas, ctx) {
+  setHighQuality(ctx);
+  const w = canvas.width;
+  const h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
 
   // Kartenhintergrund
-  ctxFront.fillStyle = COLORS.dust;
-  ctxFront.fillRect(0, 0, w, h);
+  ctx.fillStyle = COLORS.dust;
+  ctx.fillRect(0, 0, w, h);
 
   const { margin, bandHeight, frame, photo } = getFrontLayout(w, h);
 
   // Foto-Passepartout
-  ctxFront.fillStyle = COLORS.white;
-  drawRoundedRect(ctxFront, frame.x, frame.y, frame.w, frame.h, 14);
-  ctxFront.fill();
+  ctx.fillStyle = COLORS.white;
+  drawRoundedRect(ctx, frame.x, frame.y, frame.w, frame.h, 14);
+  ctx.fill();
 
   const px = photo.x;
   const py = photo.y;
   const pw = photo.w;
   const ph = photo.h;
 
-  ctxFront.save();
-  drawRoundedRect(ctxFront, px, py, pw, ph, 8);
-  ctxFront.clip();
+  ctx.save();
+  drawRoundedRect(ctx, px, py, pw, ph, 8);
+  ctx.clip();
 
   if (state.photo) {
     const { sx, sy, sw, sh } =
       state.crop || coverFit(state.photo.naturalWidth, state.photo.naturalHeight, pw, ph);
-    ctxFront.drawImage(state.photo, sx, sy, sw, sh, px, py, pw, ph);
+    ctx.drawImage(state.photo, sx, sy, sw, sh, px, py, pw, ph);
   } else {
-    ctxFront.fillStyle = COLORS.dust;
-    ctxFront.fillRect(px, py, pw, ph);
-    ctxFront.strokeStyle = COLORS.wald3;
-    ctxFront.lineWidth = 4;
-    ctxFront.setLineDash([16, 12]);
-    ctxFront.strokeRect(px + 10, py + 10, pw - 20, ph - 20);
-    ctxFront.setLineDash([]);
+    ctx.fillStyle = COLORS.dust;
+    ctx.fillRect(px, py, pw, ph);
+    ctx.strokeStyle = COLORS.wald3;
+    ctx.lineWidth = 4;
+    ctx.setLineDash([16, 12]);
+    ctx.strokeRect(px + 10, py + 10, pw - 20, ph - 20);
+    ctx.setLineDash([]);
 
-    ctxFront.fillStyle = COLORS.wald;
-    ctxFront.font = `600 ${pw * 0.09}px ${getFontStack('heading')}`;
-    ctxFront.textAlign = 'center';
-    ctxFront.textBaseline = 'middle';
-    ctxFront.fillText('📷', px + pw / 2, py + ph / 2 - pw * 0.06);
-    ctxFront.font = `500 ${pw * 0.05}px ${getFontStack('body')}`;
-    ctxFront.fillText('Foto hochladen', px + pw / 2, py + ph / 2 + pw * 0.08);
+    ctx.fillStyle = COLORS.wald;
+    ctx.font = `600 ${pw * 0.09}px ${getFontStack('heading')}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('📷', px + pw / 2, py + ph / 2 - pw * 0.06);
+    ctx.font = `500 ${pw * 0.05}px ${getFontStack('body')}`;
+    ctx.fillText('Foto hochladen', px + pw / 2, py + ph / 2 + pw * 0.08);
   }
-  ctxFront.restore();
+  ctx.restore();
 
   // Unteres Marken-Band: Logo und Grußtext vertikal gestapelt und zentriert,
   // damit sie sich unabhängig von Textlänge/Canvas-Breite nie überlappen.
   const bandY = h - bandHeight - margin;
-  ctxFront.fillStyle = COLORS.dust;
-  drawRoundedRect(ctxFront, margin, bandY, w - margin * 2, bandHeight, 12);
-  ctxFront.fill();
+  ctx.fillStyle = COLORS.dust;
+  drawRoundedRect(ctx, margin, bandY, w - margin * 2, bandHeight, 12);
+  ctx.fill();
 
   const logoHeight = bandHeight * 0.38;
   const bandGap = bandHeight * 0.12;
@@ -348,106 +412,123 @@ function renderFront() {
   const stackHeight = logoHeight + bandGap + taglineFontSize;
   const visibleAreaHeight = h - bandY;
   const logoY = bandY + (visibleAreaHeight - stackHeight) / 2;
-  drawLogo(ctxFront, logos.full, LOGO_FULL_RATIO, w / 2, logoY, logoHeight, 'center');
+  drawLogo(ctx, logos.full, LOGO_FULL_RATIO, w / 2, logoY, logoHeight, 'center');
 
-  ctxFront.fillStyle = COLORS.wald;
-  ctxFront.textAlign = 'center';
-  ctxFront.textBaseline = 'middle';
-  ctxFront.font = `600 ${taglineFontSize}px ${getFontStack('heading')}`;
+  ctx.fillStyle = COLORS.wald;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = `600 ${taglineFontSize}px ${getFontStack('heading')}`;
   const taglineY = logoY + logoHeight + bandGap + taglineFontSize * 0.5;
-  ctxFront.fillText('Grüße aus dem Schwarzwald', w / 2, taglineY);
+  ctx.fillText('Grüße aus dem Schwarzwald', w / 2, taglineY);
 }
 
-function renderBack() {
-  const w = canvasBack.width;
-  const h = canvasBack.height;
-  ctxBack.clearRect(0, 0, w, h);
+function renderFront() {
+  renderFrontTo(canvasFront, ctxFront);
+}
 
-  ctxBack.fillStyle = COLORS.dust;
-  ctxBack.fillRect(0, 0, w, h);
+function renderBackTo(canvas, ctx) {
+  setHighQuality(ctx);
+  const w = canvas.width;
+  const h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+
+  ctx.fillStyle = COLORS.dust;
+  ctx.fillRect(0, 0, w, h);
 
   const margin = w * 0.06;
   const dividerX = w * 0.56;
 
   // Trennlinie
-  ctxBack.strokeStyle = COLORS.wald3;
-  ctxBack.lineWidth = 3;
-  ctxBack.setLineDash([10, 10]);
-  ctxBack.beginPath();
-  ctxBack.moveTo(dividerX, margin);
-  ctxBack.lineTo(dividerX, h - margin);
-  ctxBack.stroke();
-  ctxBack.setLineDash([]);
+  ctx.strokeStyle = COLORS.wald3;
+  ctx.lineWidth = 3;
+  ctx.setLineDash([10, 10]);
+  ctx.beginPath();
+  ctx.moveTo(dividerX, margin);
+  ctx.lineTo(dividerX, h - margin);
+  ctx.stroke();
+  ctx.setLineDash([]);
 
   // Linke Seite: Nachricht
   const msgX = margin;
   const msgY = margin + 10;
   const msgWidth = dividerX - margin * 1.6;
 
-  ctxBack.fillStyle = COLORS.graphite;
-  ctxBack.textAlign = 'left';
-  ctxBack.textBaseline = 'alphabetic';
+  ctx.fillStyle = COLORS.graphite;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
   const fontSize = w * 0.032;
   const lineHeight = fontSize * 1.5;
-  ctxBack.font = `500 ${fontSize}px ${getFontStack('body')}`;
+  ctx.font = `500 ${fontSize}px ${getFontStack('body')}`;
 
   const message = state.message || 'Deine persönliche Nachricht erscheint hier ...';
-  ctxBack.globalAlpha = state.message ? 1 : 0.45;
+  ctx.globalAlpha = state.message ? 1 : 0.45;
 
   // dezente Schreiblinien
-  ctxBack.save();
-  ctxBack.strokeStyle = COLORS.wald3;
-  ctxBack.globalAlpha = 0.25;
-  ctxBack.lineWidth = 1.5;
+  ctx.save();
+  ctx.strokeStyle = COLORS.wald3;
+  ctx.globalAlpha = 0.25;
+  ctx.lineWidth = 1.5;
   for (let ly = msgY + lineHeight; ly < h - margin; ly += lineHeight) {
-    ctxBack.beginPath();
-    ctxBack.moveTo(msgX, ly);
-    ctxBack.lineTo(dividerX - margin * 0.6, ly);
-    ctxBack.stroke();
+    ctx.beginPath();
+    ctx.moveTo(msgX, ly);
+    ctx.lineTo(dividerX - margin * 0.6, ly);
+    ctx.stroke();
   }
-  ctxBack.restore();
+  ctx.restore();
 
-  wrapText(ctxBack, message, msgX, msgY + lineHeight, msgWidth, lineHeight);
-  ctxBack.globalAlpha = 1;
+  wrapText(ctx, message, msgX, msgY + lineHeight, msgWidth, lineHeight);
+  ctx.globalAlpha = 1;
 
   // Rechte Seite: Briefmarke + Adresse
-  const stampW = w * 0.2;
+  // Bewusst groesser als eine echte Briefmarke (die belegt rund 16% der
+  // Kartenbreite): die Motive tragen Beschriftung, die bei 20% im Export
+  // nicht mehr lesbar war.
+  const stampW = w * 0.26;
   const stampH = stampW * 1.2;
   const stampX = w - margin - stampW;
   const stampY = margin;
-  drawStamp(ctxBack, stampX, stampY, stampW, stampH);
+  const stampArt = stampImages[state.stamp];
+  // Tatsaechliche Markenhoehe: bei den Motiven formatabhaengig, sonst der
+  // volle Platz der gezeichneten Signet-Marke.
+  let stampDrawnH;
+  if (stampArt) {
+    stampDrawnH = drawStampArt(ctx, stampArt, stampX, stampY, stampW, stampH);
+  } else {
+    drawStamp(ctx, stampX, stampY, stampW, stampH);
+    stampDrawnH = stampH;
+  }
 
   // Adresszeilen
   const addrX = dividerX + margin * 0.6;
-  const addrTop = stampY + stampH + h * 0.09;
+  const addrTop = stampY + stampDrawnH + h * 0.09;
   const addrLineGap = h * 0.075;
   const addrWidth = w - margin - addrX;
 
-  ctxBack.strokeStyle = COLORS.wald2;
-  ctxBack.globalAlpha = 0.5;
-  ctxBack.lineWidth = 2;
+  ctx.strokeStyle = COLORS.wald2;
+  ctx.globalAlpha = 0.5;
+  ctx.lineWidth = 2;
   for (let i = 0; i < 3; i++) {
-    ctxBack.beginPath();
-    ctxBack.moveTo(addrX, addrTop + i * addrLineGap);
-    ctxBack.lineTo(addrX + addrWidth, addrTop + i * addrLineGap);
-    ctxBack.stroke();
+    ctx.beginPath();
+    ctx.moveTo(addrX, addrTop + i * addrLineGap);
+    ctx.lineTo(addrX + addrWidth, addrTop + i * addrLineGap);
+    ctx.stroke();
   }
-  ctxBack.globalAlpha = 1;
+  ctx.globalAlpha = 1;
 
-  ctxBack.fillStyle = COLORS.graphite;
-  ctxBack.font = `600 ${w * 0.028}px ${getFontStack('body')}`;
+  ctx.fillStyle = COLORS.graphite;
+  ctx.font = `600 ${w * 0.028}px ${getFontStack('body')}`;
   // Lange Empfängernamen auf zwei Zeilen umbrechen: eine Zeile fasst nur rund
   // 26 Zeichen, das Eingabefeld erlaubt aber 40 — ohne Umbruch lief der Name
   // ohne Hinweis über den Kartenrand hinaus. Jede Zeile sitzt auf einer der
   // vorgezeichneten Adresslinien, die dritte bleibt frei.
   const recipientPrefix = 'An: ';
   const recipientName = state.recipientName || '________________';
-  const prefixWidth = ctxBack.measureText(recipientPrefix).width;
+  const prefixWidth = ctx.measureText(recipientPrefix).width;
   const recipientLines = fitLines(
-    ctxBack, recipientName, addrWidth, 2, addrWidth - prefixWidth
+    ctx, recipientName, addrWidth, 2, addrWidth - prefixWidth
   );
   recipientLines.forEach((line, i) => {
-    ctxBack.fillText(i === 0 ? recipientPrefix + line : line, addrX, addrTop + i * addrLineGap - 8);
+    ctx.fillText(i === 0 ? recipientPrefix + line : line, addrX, addrTop + i * addrLineGap - 8);
   });
 
   // Absender auf der dritten, bislang ungenutzten Adresslinie. Gleiche
@@ -455,16 +536,55 @@ function renderBack() {
   // schmalerer erster Zeile wegen des Praefixes — kein neuer Umbruchcode.
   if (state.senderName) {
     const senderPrefix = 'Von: ';
-    const senderPrefixWidth = ctxBack.measureText(senderPrefix).width;
+    const senderPrefixWidth = ctx.measureText(senderPrefix).width;
     const senderLines = fitLines(
-      ctxBack, state.senderName, addrWidth, 1, addrWidth - senderPrefixWidth
+      ctx, state.senderName, addrWidth, 1, addrWidth - senderPrefixWidth
     );
-    ctxBack.fillText(senderPrefix + senderLines[0], addrX, addrTop + 2 * addrLineGap - 8);
+    ctx.fillText(senderPrefix + senderLines[0], addrX, addrTop + 2 * addrLineGap - 8);
   }
 
   // Kleines Logo unten rechts
   const smallLogoHeight = h * 0.035;
-  drawLogo(ctxBack, logos.full, LOGO_FULL_RATIO, w - margin, h - margin, smallLogoHeight, 'right');
+  drawLogo(ctx, logos.full, LOGO_FULL_RATIO, w - margin, h - margin, smallLogoHeight, 'right');
+}
+
+function renderBack() {
+  renderBackTo(canvasBack, ctxBack);
+}
+
+// Blendet Motive aus, deren Datei nicht geladen werden konnte, markiert das
+// aktive und versteckt die ganze Gruppe, wenn kein einziges Motiv da ist.
+// Wird nach jedem Ladeversuch erneut aufgerufen, weil die Bilder einzeln und
+// asynchron eintreffen.
+function updateStampOptions() {
+  let verfuegbar = 0;
+  stampChoices.forEach(btn => {
+    const id = btn.dataset.stamp;
+    const geladen = Boolean(stampImages[id]);
+    btn.hidden = !geladen;
+    btn.setAttribute('aria-pressed', String(geladen && state.stamp === id));
+    btn.classList.toggle('is-active', geladen && state.stamp === id);
+    if (geladen) verfuegbar++;
+  });
+  stampGroup.hidden = verfuegbar === 0;
+
+  // Faellt das aktive Motiv aus, auf das erste verfuegbare wechseln, damit
+  // nie eine Auswahl markiert ist, die es nicht gibt.
+  if (verfuegbar > 0 && !stampImages[state.stamp]) {
+    const ersatz = STAMPS.find(s => stampImages[s.id]);
+    if (ersatz) {
+      state.stamp = ersatz.id;
+      updateStampOptions();
+      renderBack();
+    }
+  }
+}
+
+function selectStamp(id) {
+  if (!stampImages[id] || state.stamp === id) return;
+  state.stamp = id;
+  updateStampOptions();
+  renderBack();
 }
 
 function getFontStack(kind) {
@@ -801,7 +921,17 @@ btnRecrop.addEventListener('click', () => openCropDialog());
 // Story-Format 9:16 für Instagram Story / WhatsApp-Status. Bewusst eine eigene
 // Funktion neben buildCombinedCanvas(): Letztere ist die unveränderte Quelle für
 // den normalen Export und wird hier nicht angefasst.
-const STORY = { width: 1080, height: 1920 };
+// Der Story-Export war lange der schlechteste Pfad: zwei Karten uebereinander
+// in ein 9:16-Bild zwingt die Karte auf die Breite des Rahmens herunter. Bei
+// 1350px Rahmenbreite landete die 2546px breite Karte bei 1148px — also 45%,
+// die Beschriftung der Briefmarke war damit weg.
+// Die gezeichnete Groesse der Marke haengt allein von STORY.width ab
+// (0,26 Kartenanteil x 0,85 Rahmenanteil ≈ 22% der Story-Breite), nicht von
+// der Kartenaufloesung. Deshalb hilft hier nur ein groesserer Rahmen.
+// 2700 gewaehlt, weil die Karte damit auf 90% skaliert wird — praktisch
+// verlustfrei — und das Bild mit 13,0 Megapixel unter der Canvas-Obergrenze
+// von iOS Safari (16,7 MP) bleibt.
+const STORY = { width: 2700, height: 4800 };
 
 // Karte mit weichem Schatten und runden Ecken auf den Story-Hintergrund setzen.
 // Die Canvases selbst haben harte Ecken (der Radius lebt sonst nur im CSS) —
@@ -825,11 +955,24 @@ function drawCardOnStory(ctx, source, x, y, w, h) {
   ctx.restore();
 }
 
+// Zeichnet eine Kartenseite in beliebiger Groesse auf ein Offscreen-Canvas.
+// Moeglich, weil die gesamte Layout-Mathematik in Anteilen von
+// canvas.width/height rechnet — dieselbe Eigenschaft, die schon die
+// Aufloesungserhoehung der Karte kostenlos gemacht hat.
+function renderCardAt(renderFn, width, height) {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  renderFn(canvas, canvas.getContext('2d'));
+  return canvas;
+}
+
 function buildStoryCanvas() {
   const story = document.createElement('canvas');
   story.width = STORY.width;
   story.height = STORY.height;
   const ctx = story.getContext('2d');
+  setHighQuality(ctx);
 
   // Markenverlauf wie auf der Seite (postkarte.css, body).
   const bg = ctx.createLinearGradient(0, 0, 0, STORY.height);
@@ -856,13 +999,25 @@ function buildStoryCanvas() {
   const boxH = STORY.height - boxTop - boxBottom;
 
   const scale = Math.min(boxW / cardW, boxH / stackH);
-  const dw = cardW * scale;
-  const dh = cardH * scale;
+  const dw = Math.round(cardW * scale);
+  const dh = Math.round(cardH * scale);
   const dx = (STORY.width - dw) / 2;
   const dy = boxTop + (boxH - stackH * scale) / 2;
 
-  drawCardOnStory(ctx, canvasFront, dx, dy, dw, dh);
-  drawCardOnStory(ctx, canvasBack, dx, dy + (cardH + gapSource) * scale, dw, dh);
+  // Die Karten werden hier in Zielgroesse NEU GEZEICHNET statt die fertigen
+  // Vorschau-Canvases zu verkleinern. Beim Verkleinern wuerde jedes Element
+  // zweimal resampled (Foto → Karte → Story, Marke 1400 → 749 → 597); so
+  // entsteht nur ein einziger Resampling-Schritt, und Text wird direkt in
+  // Zielaufloesung gerastert statt weichgerechnet. Kostet zwei kurzlebige
+  // Offscreen-Canvases, aber kein zusaetzliches Detail.
+  // Eine 1:1-Platzierung ist nicht moeglich: dafuer muesste die Story rund
+  // 3400px breit sein und laege bei ueber 20 Megapixel — weit ueber der
+  // Canvas-Obergrenze von iOS Safari.
+  const frontStory = renderCardAt(renderFrontTo, dw, dh);
+  const backStory = renderCardAt(renderBackTo, dw, dh);
+
+  drawCardOnStory(ctx, frontStory, dx, dy, dw, dh);
+  drawCardOnStory(ctx, backStory, dx, dy + (cardH + gapSource) * scale, dw, dh);
 
   // Dust-Logovariante — laut Brand Guideline nur auf dunklem Grund, was hier
   // gegeben ist. Fehlt die Datei, bleibt die Story einfach ohne Logo.
@@ -882,6 +1037,7 @@ function buildCombinedCanvas() {
   combined.width = canvasFront.width;
   combined.height = canvasFront.height * 2 + gap;
   const ctx = combined.getContext('2d');
+  setHighQuality(ctx);
   ctx.fillStyle = COLORS.wald;
   ctx.fillRect(0, 0, combined.width, combined.height);
   ctx.drawImage(canvasFront, 0, 0);
@@ -985,6 +1141,26 @@ Promise.all([
   .catch(() => {
     renderAll();
   });
+
+stampChoices.forEach(btn => {
+  btn.addEventListener('click', () => selectStamp(btn.dataset.stamp));
+});
+
+// Briefmarken-Motive einzeln laden: fehlt eine Datei, sollen die uebrigen
+// trotzdem waehlbar bleiben — deshalb bewusst kein Promise.all, das beim
+// ersten Fehler alles verwerfen wuerde.
+STAMPS.forEach(stamp => {
+  loadImage(stamp.src)
+    .then(img => {
+      stampImages[stamp.id] = img;
+      updateStampOptions();
+      if (state.stamp === stamp.id) renderBack();
+    })
+    .catch(() => {
+      stampImages[stamp.id] = null;
+      updateStampOptions();
+    });
+});
 
 // Web-Fonts (Zilla Slab / Asap Condensed) laden asynchron; Canvas-Text, das
 // vor Ladeende gezeichnet wurde, nutzt Fallback-Metriken. Einmaliger

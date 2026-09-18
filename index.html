@@ -21,12 +21,12 @@
         <div class="postcard-flip-inner" id="postcard-flip-inner">
           <div class="postcard-face postcard-face--front">
             <div class="postcard-face-clip">
-              <canvas id="canvas-front" width="1697" height="1200" aria-label="Vorderseite der Postkarte"></canvas>
+              <canvas id="canvas-front" width="2880" height="2036" aria-label="Vorderseite der Postkarte"></canvas>
             </div>
           </div>
           <div class="postcard-face postcard-face--back">
             <div class="postcard-face-clip">
-              <canvas id="canvas-back" width="1697" height="1200" aria-label="Rückseite der Postkarte"></canvas>
+              <canvas id="canvas-back" width="2880" height="2036" aria-label="Rückseite der Postkarte"></canvas>
             </div>
           </div>
         </div>
@@ -64,6 +64,27 @@
       <div class="form-group">
         <label for="sender-input" class="form-label">Absender</label>
         <input type="text" id="sender-input" class="form-input" placeholder="z. B. Familie M&uuml;ller" maxlength="40">
+      </div>
+
+      <!-- Auswahl ueber Bildvorschauen statt Textlabels: der Gast sieht, was
+           er waehlt. Die Gruppe wird von updateStampOptions() ausgeblendet,
+           wenn keines der Motive geladen werden konnte. -->
+      <div class="form-group stamp-group" id="stamp-group" hidden>
+        <span class="form-label">Briefmarke</span>
+        <div class="stamp-choices" role="group" aria-label="Briefmarken-Motiv">
+          <button type="button" class="stamp-choice" data-stamp="bad-wildbad" aria-pressed="false">
+            <img src="assets/AIG_marke_bad_wildbad.webp" alt="Bad Wildbad" loading="lazy">
+          </button>
+          <button type="button" class="stamp-choice" data-stamp="hasen" aria-pressed="false">
+            <img src="assets/AIG_marke_hasen.webp" alt="Hasen" loading="lazy">
+          </button>
+          <button type="button" class="stamp-choice" data-stamp="sommerbergbahn" aria-pressed="false">
+            <img src="assets/AIG_marke_sommerbergbahn.webp" alt="Sommerbergbahn" loading="lazy">
+          </button>
+          <button type="button" class="stamp-choice" data-stamp="wasserrad" aria-pressed="false">
+            <img src="assets/AIG_marke_wasserrad.webp" alt="Wasserrad im Kurpark" loading="lazy">
+          </button>
+        </div>
       </div>
 
       <div class="form-group">

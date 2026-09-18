@@ -119,7 +119,7 @@ body {
   width: 100%;
   /* Default (Querformat); wird von applyFormat() in postkarte.js dynamisch
      per Inline-Style auf das tatsächlich gewählte Kartenformat gesetzt. */
-  aspect-ratio: 1697 / 1200;
+  aspect-ratio: 2880 / 2036;
   transform-style: preserve-3d;
   -webkit-transform-style: preserve-3d;
   transition: transform 0.7s cubic-bezier(0.4, 0.2, 0.2, 1);
@@ -458,4 +458,46 @@ body {
 .form-button {
   width: 100%;
   margin-top: 0.6rem;
+}
+
+/* ---------------- Briefmarken-Auswahl ---------------- */
+/* Die Motive sind unterschiedlich proportioniert (zwei hoch-, zwei
+   querformatig). Die Kacheln sind deshalb gleich hoch und zentrieren das
+   Motiv, statt es auf ein einheitliches Format zu zwingen. */
+.stamp-choices {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.stamp-choice {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 84px;
+  padding: 0.4rem;
+  border: 2px solid transparent;
+  border-radius: calc(var(--radius) - 3px);
+  background: var(--c-white);
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.stamp-choice img {
+  max-width: 100%;
+  max-height: 72px;
+  width: auto;
+  height: auto;
+  display: block;
+}
+
+.stamp-choice.is-active {
+  border-color: var(--c-fichte);
+  box-shadow: 0 1px 4px rgba(37, 60, 40, 0.2);
+}
+
+.stamp-choice:focus-visible {
+  outline: 2px solid var(--c-fichte);
+  outline-offset: 2px;
 }
