@@ -138,6 +138,7 @@ const shareStatus = document.getElementById('share-status');
 
 const fmtBoth = document.getElementById('fmt-both');
 const fmtStory = document.getElementById('fmt-story');
+const fmtGif = document.getElementById('fmt-gif');
 
 const photoInput = document.getElementById('photo-input');
 const recipientInput = document.getElementById('recipient-input');
@@ -1316,12 +1317,13 @@ function buildCombinedCanvas() {
 }
 
 // 'both' = Vorder- und Rückseite gestapelt (bisheriges Verhalten),
-// 'story' = 9:16 für Instagram Story und WhatsApp-Status.
+// 'story' = 9:16 für Instagram Story und WhatsApp-Status,
+// 'gif' = animiert, die Karte dreht sich von vorn nach hinten.
 let shareFormat = 'both';
 
 function setShareFormat(key) {
   shareFormat = key;
-  [[fmtBoth, 'both'], [fmtStory, 'story']].forEach(([btn, id]) => {
+  [[fmtBoth, 'both'], [fmtStory, 'story'], [fmtGif, 'gif']].forEach(([btn, id]) => {
     btn.classList.toggle('is-active', key === id);
     btn.setAttribute('aria-pressed', String(key === id));
   });
@@ -1354,6 +1356,110 @@ function currentExport() {
   return exports[shareFormat]();
 }
 
+// ---------------- Animiertes GIF (Karte dreht sich) ----------------
+// gifenc (MIT, assets/gifenc.esm.js) wird erst beim ersten GIF-Export geladen.
+// Ablauf: Vorderseite halten -> Drehung (Karte wird horizontal zusammen- und
+// als Rueckseite wieder aufgeschoben, leicht groesser in der Mitte, damit es
+// nach Perspektive aussieht) -> Rueckseite halten, Endlosschleife. Jedes Bild
+// bekommt eine eigene 256-Farben-Palette; das haelt Foto und Text brauchbar.
+const GIF_CARD_W = 800;
+const GIF_FLIP_FRAMES = 10;
+const GIF_HOLD_FRONT_MS = 1800;
+const GIF_HOLD_BACK_MS = 3000;
+const GIF_FLIP_FRAME_MS = 50;
+
+let gifencPromise = null;
+function loadGifenc() {
+  if (!gifencPromise) {
+    gifencPromise = import('./assets/gifenc.esm.js').catch(err => {
+      gifencPromise = null;
+      throw err;
+    });
+  }
+  return gifencPromise;
+}
+
+const nextTick = () => new Promise(resolve => setTimeout(resolve, 0));
+
+async function buildFlipGif(onProgress) {
+  const { GIFEncoder, quantize, applyPalette } = await loadGifenc();
+
+  const cardW = GIF_CARD_W;
+  const cardH = Math.round(cardW * canvasFront.height / canvasFront.width);
+  const padX = Math.round(cardW * 0.06);
+  const padY = Math.round(cardH * 0.12);
+  const W = cardW + padX * 2;
+  const H = cardH + padY * 2;
+
+  const front = renderCardAt(renderFrontTo, cardW, cardH);
+  const back = renderCardAt(renderBackTo, cardW, cardH);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  setHighQuality(ctx);
+
+  const gif = GIFEncoder();
+  const total = GIF_FLIP_FRAMES + 2;
+  let done = 0;
+
+  async function addFrame(source, scaleX, lift, delay) {
+    fillBrandGradient(ctx, W, H);
+    const w = Math.max(cardW * scaleX, 2);
+    const h = cardH * (1 + lift);
+    drawCardOnStory(ctx, source, padX + (cardW - w) / 2, padY + (cardH - h) / 2, w, h);
+    const { data } = ctx.getImageData(0, 0, W, H);
+    const palette = quantize(data, 256);
+    gif.writeFrame(applyPalette(data, palette), W, H, { palette, delay });
+    done++;
+    onProgress(done / total);
+    await nextTick();
+  }
+
+  await addFrame(front, 1, 0, GIF_HOLD_FRONT_MS);
+  for (let i = 1; i <= GIF_FLIP_FRAMES; i++) {
+    const t = i / (GIF_FLIP_FRAMES + 1);
+    const angle = Math.PI * (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
+    const cos = Math.cos(angle);
+    await addFrame(angle < Math.PI / 2 ? front : back, Math.abs(cos), 0.07 * Math.sin(angle), GIF_FLIP_FRAME_MS);
+  }
+  await addFrame(back, 1, 0, GIF_HOLD_BACK_MS);
+
+  gif.finish();
+  return new Blob([gif.bytes()], { type: 'image/gif' });
+}
+
+async function shareGif() {
+  btnShare.disabled = true;
+  shareStatus.textContent = 'GIF wird erstellt …';
+  let blob;
+  try {
+    blob = await buildFlipGif(p => {
+      shareStatus.textContent = `GIF wird erstellt … ${Math.round(p * 100)} %`;
+    });
+  } catch (err) {
+    shareStatus.textContent = 'Das GIF konnte leider nicht erstellt werden.';
+    updateShareAvailability();
+    return;
+  }
+  updateShareAvailability();
+  shareStatus.textContent = '';
+
+  const filename = 'ab-ins-gruene-postkarte.gif';
+  const file = new File([blob], filename, { type: 'image/gif' });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: 'Meine Ab ins Grüne Postkarte', text: shareText() });
+    } catch (err) {
+      if (err.name !== 'AbortError') shareStatus.textContent = 'Teilen war leider nicht möglich.';
+    }
+    return;
+  }
+  saveBlob(blob, filename);
+  shareStatus.textContent = 'Animiertes GIF wurde gespeichert!';
+}
+
 function saveBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -1366,6 +1472,7 @@ function saveBlob(blob, filename) {
 }
 
 async function sharePostcard() {
+  if (shareFormat === 'gif') return shareGif();
   const { canvas: source, filename, saved } = currentExport();
   source.toBlob(async blob => {
     if (!blob) return;
@@ -1395,6 +1502,7 @@ async function sharePostcard() {
 btnShare.addEventListener('click', sharePostcard);
 fmtBoth.addEventListener('click', () => setShareFormat('both'));
 fmtStory.addEventListener('click', () => setShareFormat('story'));
+fmtGif.addEventListener('click', () => setShareFormat('gif'));
 
 // ---------------- Init ----------------
 applyFormat('landscape');
