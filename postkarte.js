@@ -827,8 +827,26 @@ function toggleFlip() {
 }
 
 btnFlip.addEventListener('click', toggleFlip);
+// Solange noch kein Foto da ist, lockt die Vorderseite mit Kamera-Symbol und
+// "Foto hochladen": Ein Tipp in diese Fläche öffnet direkt die Fotoauswahl,
+// statt die Karte umzudrehen. Ausserhalb der Fläche (Rand, Band) und sobald
+// ein Foto gesetzt ist, dreht ein Tipp die Karte wie bisher.
+function isTapOnEmptyPhotoArea(e) {
+  if (state.photo || state.side !== 'front') return false;
+  const rect = canvasFront.getBoundingClientRect();
+  if (!rect.width || !rect.height) return false;
+  const { photo } = getFrontLayout(canvasFront.width, canvasFront.height);
+  const x = (e.clientX - rect.left) * (canvasFront.width / rect.width);
+  const y = (e.clientY - rect.top) * (canvasFront.height / rect.height);
+  return x >= photo.x && x <= photo.x + photo.w && y >= photo.y && y <= photo.y + photo.h;
+}
+
 flipWrapper.addEventListener('click', e => {
   if (e.target.closest('#btn-flip')) return;
+  if (isTapOnEmptyPhotoArea(e)) {
+    photoInput.click();
+    return;
+  }
   toggleFlip();
 });
 
