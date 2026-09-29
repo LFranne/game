@@ -134,6 +134,7 @@ const flipInner = document.getElementById('postcard-flip-inner');
 const flipWrapper = document.getElementById('postcard-flip');
 const btnFlip = document.getElementById('btn-flip');
 const btnShare = document.getElementById('btn-share');
+const shareLabel = document.getElementById('share-label');
 const shareStatus = document.getElementById('share-status');
 
 const fmtBoth = document.getElementById('fmt-both');
@@ -592,6 +593,7 @@ function renderFrontTo(canvas, ctx) {
 }
 
 function renderFront() {
+  invalidatePendingShare();
   renderFrontTo(canvasFront, ctxFront);
 }
 
@@ -725,6 +727,7 @@ function renderBackTo(canvas, ctx, showSlots) {
 }
 
 function renderBack() {
+  invalidatePendingShare();
   // Nur die Vorschau zeigt die freien, nummerierten Sticker-Plaetze.
   renderBackTo(canvasBack, ctxBack, true);
 }
@@ -1325,6 +1328,7 @@ let shareFormat = 'both';
 
 function setShareFormat(key) {
   shareFormat = key;
+  invalidatePendingShare();
   [[fmtBoth, 'both'], [fmtStory, 'story'], [fmtGif, 'gif'], [fmtVideo, 'video']].forEach(([btn, id]) => {
     btn.classList.toggle('is-active', key === id);
     btn.setAttribute('aria-pressed', String(key === id));
@@ -1509,13 +1513,31 @@ function buildFlipVideo(mimeType, onProgress) {
   });
 }
 
-async function deliverBlob(blob, filename, savedText) {
+// Teilen-Dialog nur direkt aus einem Tipp heraus: navigator.share() verlangt
+// eine frische Nutzer-Geste, und die ist nach Sekunden (Video-Aufnahme, GIF-
+// Berechnung) abgelaufen. Deshalb entsteht die Datei in einem ersten Tipp, und
+// der Button wird zu "Jetzt teilen"; erst der zweite Tipp ruft share() auf.
+// Ändert sich die Karte danach, verfällt die fertige Datei (invalidate...).
+let pendingShare = null;
+
+function invalidatePendingShare() {
+  if (!pendingShare) return;
+  pendingShare = null;
+  shareLabel.textContent = 'Teilen';
+}
+
+async function deliverPending() {
+  const { blob, filename, savedText } = pendingShare;
   const file = new File([blob], filename, { type: blob.type });
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try {
       await navigator.share({ files: [file], title: 'Meine Ab ins Grüne Postkarte', text: shareText() });
+      shareStatus.textContent = '';
     } catch (err) {
-      if (err.name !== 'AbortError') shareStatus.textContent = 'Teilen war leider nicht möglich.';
+      if (err.name === 'AbortError') return;
+      // Datei bleibt erhalten: zweite Chance ist das Speichern.
+      saveBlob(blob, filename);
+      shareStatus.textContent = 'Teilen ging nicht, die Datei wurde stattdessen gespeichert.';
     }
     return;
   }
@@ -1524,6 +1546,8 @@ async function deliverBlob(blob, filename, savedText) {
 }
 
 async function shareAnimated(kind) {
+  if (pendingShare && pendingShare.kind === kind) return deliverPending();
+
   btnShare.disabled = true;
   const label = kind === 'gif' ? 'GIF' : 'Video';
   const report = p => {
@@ -1554,8 +1578,9 @@ async function shareAnimated(kind) {
     return;
   }
   updateShareAvailability();
-  shareStatus.textContent = '';
-  await deliverBlob(blob, filename, `${label} wurde gespeichert!`);
+  pendingShare = { kind, blob, filename, savedText: `${label} wurde gespeichert!` };
+  shareLabel.textContent = `${label} jetzt teilen`;
+  shareStatus.textContent = `${label} ist fertig. Tippe auf „${label} jetzt teilen“.`;
 }
 
 function saveBlob(blob, filename) {
