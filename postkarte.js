@@ -261,6 +261,31 @@ function clamp(value, lo, hi) {
   return value < lo ? lo : value > hi ? hi : value;
 }
 
+// Zeichnet den Bildausschnitt rect (Naturpixel) in das Zielrechteck. Ragt rect
+// ueber das Bild hinaus (Herauszoomen), bleibt der Rand dust-farbig statt das
+// Bild zu strecken; drawImage mit Quelle ausserhalb des Bildes ist je nach
+// Browser unzuverlaessig, deshalb wird auf die Bildflaeche geschnitten.
+function drawPhotoRect(ctx, img, rect, dx, dy, dw, dh) {
+  const { sx, sy, sw, sh } = rect;
+  const iw = img.naturalWidth;
+  const ih = img.naturalHeight;
+  if (sx >= 0 && sy >= 0 && sx + sw <= iw + 0.5 && sy + sh <= ih + 0.5) {
+    ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
+    return;
+  }
+  ctx.fillStyle = COLORS.dust;
+  ctx.fillRect(dx, dy, dw, dh);
+  const x0 = Math.max(sx, 0);
+  const y0 = Math.max(sy, 0);
+  const x1 = Math.min(sx + sw, iw);
+  const y1 = Math.min(sy + sh, ih);
+  if (x1 <= x0 || y1 <= y0) return;
+  const kx = dw / sw;
+  const ky = dh / sh;
+  ctx.drawImage(img, x0, y0, x1 - x0, y1 - y0,
+    dx + (x0 - sx) * kx, dy + (y0 - sy) * ky, (x1 - x0) * kx, (y1 - y0) * ky);
+}
+
 function coverFit(imgW, imgH, boxW, boxH) {
   const imgRatio = imgW / imgH;
   const boxRatio = boxW / boxH;
@@ -513,7 +538,7 @@ function renderFrontTo(canvas, ctx) {
   if (state.photo) {
     const { sx, sy, sw, sh } =
       state.crop || coverFit(state.photo.naturalWidth, state.photo.naturalHeight, pw, ph);
-    ctx.drawImage(state.photo, sx, sy, sw, sh, px, py, pw, ph);
+    drawPhotoRect(ctx, state.photo, { sx, sy, sw, sh }, px, py, pw, ph);
   } else {
     ctx.fillStyle = COLORS.dust;
     ctx.fillRect(px, py, pw, ph);
@@ -903,11 +928,9 @@ const MAX_ZOOM = 4;
 
 // Ansichtszustand des Dialogs. Bewusst nicht das Rechteck direkt manipulieren,
 // sondern Zoom + Mittelpunkt halten und das Rechteck daraus ableiten: dadurch
-// ist „das Bild füllt den Ausschnitt immer vollständig" eine
-// Konstruktionseigenschaft statt einer nachträglichen Prüfung. coverFit()
-// liefert base.sw <= imgW; für zoom >= 1 gilt also sw <= imgW, die
-// Klemmgrenzen können nie invertiert sein.
-const cropView = { img: null, base: null, zoom: 1, cx: 0, cy: 0, stageW: 0, stageH: 0 };
+// sind die Klemmgrenzen nie invertiert. Ab zoom < 1 darf der Ausschnitt ueber
+// das Bild hinausragen; clampCropCenter() zentriert das Bild dann.
+const cropView = { img: null, base: null, zoom: 1, minZoom: 1, cx: 0, cy: 0, stageW: 0, stageH: 0 };
 
 let cropSnapshot = null;
 let cropRaf = 0;
@@ -920,10 +943,14 @@ function cropRect() {
   return { sx: cropView.cx - sw / 2, sy: cropView.cy - sh / 2, sw, sh };
 }
 
+// Ist der Ausschnitt breiter/hoeher als das Bild (Herauszoomen), bleibt das
+// Bild auf dieser Achse mittig stehen.
 function clampCropCenter() {
   const { sw, sh } = cropRect();
-  cropView.cx = clamp(cropView.cx, sw / 2, cropView.img.naturalWidth - sw / 2);
-  cropView.cy = clamp(cropView.cy, sh / 2, cropView.img.naturalHeight - sh / 2);
+  const iw = cropView.img.naturalWidth;
+  const ih = cropView.img.naturalHeight;
+  cropView.cx = sw >= iw ? iw / 2 : clamp(cropView.cx, sw / 2, iw - sw / 2);
+  cropView.cy = sh >= ih ? ih / 2 : clamp(cropView.cy, sh / 2, ih - sh / 2);
 }
 
 // Stage-Größe in JS rechnen statt per aspect-ratio + max-height im CSS: das
@@ -952,9 +979,7 @@ function drawCrop() {
   cropRaf = 0;
   if (!cropView.img) return;
   const { sx, sy, sw, sh } = cropRect();
-  cropCtx.fillStyle = COLORS.graphite;
-  cropCtx.fillRect(0, 0, cropCanvas.width, cropCanvas.height);
-  cropCtx.drawImage(cropView.img, sx, sy, sw, sh, 0, 0, cropCanvas.width, cropCanvas.height);
+  drawPhotoRect(cropCtx, cropView.img, { sx, sy, sw, sh }, 0, 0, cropCanvas.width, cropCanvas.height);
 }
 
 function requestCropDraw() {
@@ -965,7 +990,7 @@ function requestCropDraw() {
 // bleibt stehen. Gemeinsamer Pfad für Mausrad, Pinch und Slider (der Slider
 // ankert mittig).
 function setCropZoom(nextZoom, anchorX, anchorY) {
-  const z = clamp(nextZoom, 1, MAX_ZOOM);
+  const z = clamp(nextZoom, cropView.minZoom, MAX_ZOOM);
   const before = cropRect();
   const ax = anchorX === undefined ? cropView.stageW / 2 : anchorX;
   const ay = anchorY === undefined ? cropView.stageH / 2 : anchorY;
@@ -1062,8 +1087,15 @@ function openCropDialog(snapshot) {
   cropView.base = coverFit(
     state.photo.naturalWidth, state.photo.naturalHeight, getCropAspect(), 1
   );
+  // Kleinster Zoom = ganzes Foto sichtbar (contain), plus etwas Luft (x 0,6),
+  // damit sich auch ein passendes Foto noch verkleinern laesst; der Rest der
+  // Flaeche wird dust-farben aufgefuellt (drawPhotoRect).
+  const aspect = cropView.base.sw / cropView.base.sh;
+  const containW = Math.max(state.photo.naturalWidth, state.photo.naturalHeight * aspect);
+  cropView.minZoom = Math.min(1, cropView.base.sw / containW) * 0.6;
+  cropZoomSlider.min = String(cropView.minZoom);
   const current = state.crop || cropView.base;
-  cropView.zoom = clamp(cropView.base.sw / current.sw, 1, MAX_ZOOM);
+  cropView.zoom = clamp(cropView.base.sw / current.sw, cropView.minZoom, MAX_ZOOM);
   cropView.cx = current.sx + current.sw / 2;
   cropView.cy = current.sy + current.sh / 2;
   cropZoomSlider.value = String(cropView.zoom);
