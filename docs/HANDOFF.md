@@ -13,7 +13,7 @@ Gast lädt ein Foto hoch → wählt den Bildausschnitt → tippt Empfänger, Abs
 Fertig und im Browser gegengeprüft:
 
 - **Foto-Upload mit Zuschneide-Dialog** (Ziehen, Zoom per Mausrad/Pinch/Slider, Abbrechen stellt den Zustand davor vollständig wieder her, nachträglich änderbar über „Ausschnitt anpassen")
-- **Adaptives Kartenformat**, quer oder hoch, anhand des Fotoverhältnisses
+- **Nur Querformat** (seit 2026-09-29): Hochformat war vorhanden, sah nicht gut aus und wurde gestrichen. Hochformatfotos werden im Zuschneide-Dialog auf Querformat zugeschnitten. `FORMATS` enthält nur noch `landscape`; `applyFormat()`/`state.format` bleiben, weil der Abbrechen-Pfad damit arbeitet.
 - **Empfänger** und **Absender** (je `maxlength="40"`), **Nachricht** (200 Zeichen mit Zähler) — alle mit Überlaufsicherung, Text kann nie über den Kartenrand laufen
 - **Briefmarken-Auswahl**: vier gestaltete Motive, Auswahl über Bildkacheln in der Formularspalte
 - **Vorder-/Rückseite** mit CSS-3D-Flip
@@ -31,7 +31,8 @@ Fertig und im Browser gegengeprüft:
 - Kein Login, keine Datenbank, kein Backend, keine Speicherung vergangener Karten (so im PRD festgelegt).
 - **Absender-Feld** erweitert den PRD-Scope bewusst und ist entschieden — nicht erneut hinterfragen.
 - **Teilen per Link** (Empfänger öffnet eine Seite und dreht die Karte selbst) ist besprochen und **auf Phase 2 vertagt**, siehe Abschnitt 5.
-- Gebaut und **auf Nutzerwunsch wieder entfernt**: Sticker, WhatsApp-/E-Mail-Buttons, ein separater „Bild speichern"-Button. Nicht ungefragt neu bauen.
+- Gebaut und **auf Nutzerwunsch wieder entfernt**: WhatsApp-/E-Mail-Buttons, ein separater „Bild speichern"-Button. Nicht ungefragt neu bauen.
+- **Sticker (Stand 2026-09-29):** Eine frühere, andere Sticker-Fassung wurde entfernt. Die heutige nutzt **acht von Franziska selbst gestaltete Motive** (`assets/AIG_sticker_*.webp`) und ist ausdrücklich gewünscht: **nur auf der Rückseite**, unter den Adresszeilen, bis zu 4 in festen Plätzen, dasselbe Motiv auch mehrfach. **Die Vorderseite bleibt bewusst frei — dort nur das Foto, keine Sticker.** Nicht mit der alten Entfernung verwechseln.
 - **Briefmarken-Auswahl ist ausdrücklich gewünscht und bleibt.** Achtung, Stolperfalle in der Historie: In einer früheren Iteration wurden drei Briefmarken-Varianten gebaut und auf Wunsch wieder entfernt. Die heutigen vier sind etwas anderes — **von Franziska selbst gestaltete Bilddateien**, am 2026-09-18 auf ausdrücklichen Wunsch eingebaut. Nicht mit der alten Entfernung verwechseln.
 - Die vier Motive **liegen im Repository** (`assets/AIG_marke_*.webp`). Die Rechtefrage ist geklärt: Franziska hat sie selbst erstellt. Eine frühere `.gitignore`-Ausnahme dafür ist wieder entfernt.
 
@@ -61,7 +62,7 @@ Das hier sind die nicht offensichtlichen Stellen. Wer sie übersieht, baut funkt
 - `state.crop` ist ein Rechteck `{sx, sy, sw, sh}` in **Naturpixeln des Originalfotos** und gehört immer zum aktuellen `state.photo`. Erzwungen durch die einzige Schreibstelle **`setPhoto(img, crop)`** — beide nie einzeln setzen.
 - Rechteck statt fertig zugeschnittenem Bild, weil: nur ein Resampling, kein zweites Vollbild-Canvas im Speicher, nachträglich änderbar, und der **Export braucht null Sonderbehandlung** (das Vorschau-Canvas ist die Exportquelle).
 - **Reihenfolge im Upload-Handler ist zwingend:** Snapshot sichern → `applyFormat(pickFormat(...))` → `getCropAspect()` → `coverFit()` → `setPhoto()` → `openCropDialog(snapshot)`. Der Snapshot muss **vor** jeder Änderung entstehen, sonst sichert Abbrechen den bereits neuen Zustand. `pickFormat()` bewertet weiterhin das **Original**-Verhältnis — sonst Zirkelabhängigkeit.
-- **Das Foto-Seitenverhältnis ist nicht das Kartenverhältnis:** quer ≈ 1,800 und hoch ≈ 0,828 (Karte: 1,414 / 0,707), weil Rand und Markenband Höhe wegnehmen. Dafür gibt es `getFrontLayout()` und `getCropAspect()`.
+- **Das Foto-Seitenverhältnis ist nicht das Kartenverhältnis:** ≈ 1,800 (Karte: 1,414), weil Rand und Markenband Höhe wegnehmen. Dafür gibt es `getFrontLayout()` und `getCropAspect()`.
 - Im Dialog wird nicht das Rechteck manipuliert, sondern `{zoom, cx, cy}`. Dadurch ist „Bild füllt den Ausschnitt immer vollständig" eine Konstruktionseigenschaft statt einer Prüfung.
 
 **Dialog und Pointer**
@@ -86,6 +87,19 @@ Das hier sind die nicht offensichtlichen Stellen. Wer sie übersieht, baut funkt
 - **Die Motive werden einzeln geladen** (bewusst kein `Promise.all`), damit eine fehlende Datei die übrigen nicht mitreißt. Daraus folgt eine Falle, die schon einmal zugeschlagen hat: In `updateStampOptions()` muss **„noch nicht geladen" (`undefined`) von „fehlgeschlagen" (`null`) unterschieden** werden. Eine bloße Falsy-Prüfung greift beim ersten eintreffenden Motiv, weil alle anderen dann noch `undefined` sind — die Voreinstellung wird dadurch zufällig das zuerst geladene Motiv. Lokal unsichtbar, live beim ersten Aufruf mit kaltem Cache sofort da.
 - Aufbereitung der Dateien: „Hasen" und „Wasserrad" hatten **keinen Alphakanal** (weißer bzw. cremefarbener Hintergrund) und wurden per Flood-Fill vom Rand freigestellt — sonst säße ein heller Kasten auf dem Dust-Grund und der Zackenrand wäre zunichte. Alle vier als WebP, Qualität 92, maximal 1400 px Kantenlänge: 1,03 MB statt 8,1 MB als PNG, bei Kartengröße nicht vom Original zu unterscheiden. Die Kantenlänge liegt bewusst über der maximalen Zeichengröße von 749 px, damit beim Verkleinern Reserve bleibt.
 
+**Sticker und Rückseite**
+
+- `state.stickers` ist ein Array von Sticker-IDs, Index = Platz (max. `MAX_STICKERS` = 4). Entfernen rückt die übrigen nach. `drawBackStickers()` in `renderBackTo()` zeichnet sie in den Platz unter den Adresszeilen; ein festes 2×2-Raster (Zelle max. 15 % der Kartenbreite). Jedes Motiv wird per contain in seine Zelle eingepasst. Weil das in `renderBackTo()` steckt, erscheinen die Sticker auch im Export „Beide Seiten" und in der Story ohne Sonderbehandlung.
+- Formular: Die Kacheln sind **Schalter**. Antippen wählt ein Motiv (jedes höchstens einmal), die **Zahl auf der Kachel** ist sein Platz auf der Rückseite, nochmal antippen entfernt es (die übrigen rücken nach). Ein neu gewählter Sticker dreht die Karte auf die Rückseite. Es gibt keine separaten Leerfelder im Formular.
+- **Leerfelder nur in der Vorschau:** `renderBackTo(canvas, ctx, showSlots)` zeichnet mit `showSlots` die freien Plätze gestrichelt mit Nummer. Nur `renderBack()` (Vorschau) setzt das. `currentExport()` zeichnet die Rückseite **ohne** Platzhalter neu, baut den Export und stellt danach die Vorschau wieder her; die Story ruft `renderBackTo` ohne Flag. Ohne gewählte Sticker bleibt der Bereich im Export komplett leer.
+- **Rückseiten-Layout (2026-09-29, nach Entwurf von Franziska):** Links Nachricht, **darunter mittig das gestapelte Logo** (`assets/AIG_logotype_signet_oben_wald.svg`, `LOGO_STACKED_RATIO = 396.85/222.05`); Schreiblinien und Text enden über dem Logo, bei langem Text schrumpft die Schrift bis 70 %. Rechts oben die Marke (17 % der Kartenbreite), darunter je **eine Zeile „An:" / „Von:"** (`drawAddressLine()`), darunter das 2×2-Sticker-Raster. Kein Logo mehr unten rechts oder neben der Marke.
+- **Wichtig: Adresszeilen und Sticker richten sich nach dem MAXIMALEN Markenplatz (`stampH`), nicht nach der gezeichneten Höhe.** Ein Wechsel zwischen hoch- und querformatiger Marke darf die Anordnung nie verschieben (per Pixelvergleich für alle vier Motive geprüft). Nicht auf `drawStampArt()`-Rückgabe umstellen.
+- **Schriften: ausschließlich die zwei aus der Guideline — Asap Condensed und Zilla Slab.** Keine weitere Schrift einführen, auch keine Emoji/Symbolzeichen aus Systemschriften: die Symbole in den Buttons sind Inline-SVG (`.btn-icon`, `currentColor`), das Kamera-Symbol im leeren Fotoplatz wird per `drawCameraIcon()` gezeichnet. „An:"/„Von:" sind **Zilla Slab 600**, eingegebene Namen **und die Nachricht** sind **Asap Condensed Italic 500** (echter Kursivschnitt derselben Familie von Google Fonts; die Guideline zeigt nur aufrechte Schnitte). Die Namen stehen linksbündig direkt hinter dem Doppelpunkt. Canvas-Text lädt keine Web-Fonts selbst: jeder im Canvas benutzte Schnitt wird am Dateiende per `document.fonts.load()` angefordert.
+- Nachricht beginnt eine Zeile tiefer als früher (`msgTop`). Querformatige Marken (Sommerbergbahn, Wasserrad) sind bis 23 % der Kartenbreite breit, hochformatige bleiben bei ~17 %; die Höhe ist auf `stampH` gedeckelt, darunter ändert sich nichts. **Alle Sticker-Dateien sind auf ihren sichtbaren Bereich zugeschnitten** (Alphakanal-Bounding-Box plus 1–2 % Rand, dann WebP q92, max. 1400 px). Die Originale hatten teils große transparente Ränder (Wildline 28 % unten, Baumwipfelpfad je ~16 % oben/unten): dadurch saßen sie zu hoch bzw. wirkten zu klein. Beim Austausch eines Stickers wieder so zuschneiden, sonst stimmt Zentrierung und Größe nicht. Reihenfolge der Kacheln im Formular: Wildline, Baumwipfelpfad, Palais Thermal, Paragliding / Kirschtorte, Marie, Wild Blue Forest, Bad Wildbad.
+- Die Marken-Lesbarkeit war der Grund für die alten 26 % — bei 17 % ist die Beschriftung der Motive im Export kleiner, bei Bedarf prüfen.
+- **Vorschau größer:** ab 900 px Breite bis 680 px (vorher 420 px), das Formular hat feste 420 px.
+- Nicht gebaut, da nicht gewünscht: freie Platzierung, Größe, Drehen. Eine frühere Fassung mit freiem Ziehen auf der Vorderseite ist verworfen.
+
 **Canvas und Export**
 
 - **`imageSmoothingQuality` steht per Vorgabe auf `'low'`** — ein billiger Filter, der bei jedem Verkleinern Detail kostet: Urlaubsfoto auf Kartenbreite, Markenmotiv, Story-Export. `setHighQuality(ctx)` setzt ihn auf `'high'` und muss **am Anfang jeder Zeichenfunktion** stehen, nicht einmalig im Init: Das Setzen von `canvas.width` setzt den gesamten Kontextzustand zurück, also auch diese Einstellung.
@@ -108,8 +122,8 @@ Das hier sind die nicht offensichtlichen Stellen. Wer sie übersieht, baut funkt
 1. **Gerätetest** auf echtem iOS Safari und Android Chrome: Pinch und Ziehen im Zuschneide-Dialog, Escape, Web Share.
 2. **EXIF-Orientierung** von iPhone-Fotos wird nicht ausgewertet. Betrifft schon den heutigen Code, wird durch den Zuschnitt aber erstmals sichtbar.
 3. **Kontrast prüfen:** Logo und Grußtext auf sehr hellen und sehr dunklen Fotos — nie verifiziert.
-4. **Story im Hochformat:** die zwei gestapelten Karten belegen nur ~50 % der Story-Breite, der Nachrichtentext wird auf dem Handy klein. Zwei Hochkant-Karten übereinander sind in 9:16 zwangsläufig sehr hoch — bräuchte ein eigenes Story-Layout, nicht nur einen anderen Skalierungsfaktor. Die Auflösungsarbeit vom 2026-09-18 hat daran nichts geändert, sie betraf die Schärfe, nicht die Aufteilung.
-5. **Story bleibt naturgemäß etwas hinter „Beide Seiten" zurück:** die Karte ist dort 2295 px breit statt 2880. Reine Geometrie — eine querformatige Karte in einem hochformatigen Rahmen. Nur über ein eigenes Story-Layout zu verbessern (siehe Punkt 4).
+4. ~~Story im Hochformat~~ erledigt: es gibt nur noch Querformat-Karten, die Story stapelt ausschließlich diese.
+5. **Story bleibt naturgemäß etwas hinter „Beide Seiten" zurück:** die Karte ist dort 2295 px breit statt 2880. Reine Geometrie — eine querformatige Karte in einem hochformatigen Rahmen. Nur über ein eigenes Story-Layout zu verbessern (siehe Punkt 5).
 6. **Dritte Teilen-Option „nur diese Seite"** wäre der Weg zu spürbar mehr Auflösung: ohne den Stapel könnte eine einzelne Karte deutlich höher aufgelöst werden, ohne an die iOS-Canvas-Grenze zu stoßen. Besprochen, bewusst nicht gebaut.
 
 ## 5. Phase 2: Teilen per Link
@@ -130,6 +144,7 @@ postkarte.css         Marken-Tokens in :root, Flip, Dialog, Sticky-Vorschau, Tei
 postkarte.js          Gesamte Logik (~1180 Zeilen), Abschnitte per Kommentar getrennt
 assets/               4 Original-Logo-SVGs (wald + dust, jeweils Schriftzug und Signet)
                       + 4 Briefmarken-Motive AIG_marke_*.webp (siehe Abschnitt 3)
+                      + 8 Sticker AIG_sticker_*.webp (WebP q92, max. 1400 px, zus. 2,0 MB)
 docs/PRD.md           Vollständige Produktanforderungen
 docs/HANDOFF.md       Dieses Dokument
 docs/Ab_ins_Gruene_Brand_Guideline.pdf   Brand Book, lokal, bewusst gitignored (Repo ist öffentlich)

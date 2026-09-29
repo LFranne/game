@@ -78,7 +78,7 @@ body {
   align-items: center;
   gap: 2rem;
   padding: 0 1rem 3rem;
-  max-width: 1100px;
+  max-width: 1240px;
   margin: 0 auto;
 }
 
@@ -104,6 +104,18 @@ body {
     flex-direction: row;
     align-items: flex-start;
     justify-content: center;
+  }
+
+  /* Die Karte bekommt allen Platz, den das Formular uebrig laesst (bis 680px,
+     vorher 420px); das Formular behaelt seine feste Breite. */
+  .preview-column {
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: 680px;
+  }
+
+  .form-column {
+    flex: 0 0 420px;
   }
 }
 
@@ -241,8 +253,13 @@ body {
   color: var(--c-wald);
 }
 
+/* Symbole sind Vektorgrafiken (currentColor), keine Zeichen aus einer
+   Systemschrift: die Guideline erlaubt nur Asap Condensed und Zilla Slab. */
 .btn-icon {
-  font-size: 1.1rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  flex: none;
+  display: block;
 }
 
 .share-status {
@@ -500,4 +517,92 @@ body {
 .stamp-choice:focus-visible {
   outline: 2px solid var(--c-fichte);
   outline-offset: 2px;
+}
+
+/* ---------------- Sticker ---------------- */
+/* Kacheln wie bei den Briefmarken: Bild statt Text, damit der Gast sieht, was
+   er hinzufuegt. Die Motive sind hoch, quer oder quadratisch, deshalb zentriert
+   die Kachel das Bild per contain statt es zu strecken. */
+.sticker-count {
+  margin-left: 0.35rem;
+  font-family: var(--font-body);
+  font-weight: 500;
+  color: var(--c-wald2);
+}
+
+.sticker-choices {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.sticker-choice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  padding: 0.3rem;
+  border: 2px solid transparent;
+  border-radius: calc(var(--radius) - 3px);
+  background: var(--c-white);
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
+}
+
+.sticker-choice img {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  display: block;
+}
+
+.sticker-choice:not(:disabled):active {
+  transform: scale(0.95);
+}
+
+.sticker-choice:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.sticker-choice:focus-visible {
+  outline: 2px solid var(--c-fichte);
+  outline-offset: 2px;
+}
+
+.sticker-hint {
+  margin: 0.5rem 0 0;
+  font-size: 0.9rem;
+  color: var(--c-wald2);
+}
+
+/* Zahl auf einer gewaehlten Kachel = Platz des Stickers auf der Rueckseite.
+   Kommt aus data-number (updateStickerOptions), ohne eigenes DOM-Element. */
+.sticker-choice {
+  position: relative;
+}
+
+.sticker-choice[aria-pressed="true"] {
+  border-color: var(--c-fichte);
+  box-shadow: 0 1px 4px rgba(37, 60, 40, 0.2);
+}
+
+.sticker-choice[data-number]::after {
+  content: attr(data-number);
+  position: absolute;
+  top: -0.4rem;
+  right: -0.4rem;
+  width: 1.5rem;
+  height: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--c-wald);
+  color: var(--c-white);
+  font-weight: 700;
+  font-size: 0.95rem;
+  line-height: 1;
 }

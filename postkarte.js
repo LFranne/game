@@ -15,6 +15,10 @@ const LOGO_FULL_DUST_SRC = 'assets/AIG_logotype_signet_links_dust.svg';
 // taken directly from each file's viewBox to guarantee undistorted logos.
 const LOGO_FULL_RATIO = 559 / 103;
 const LOGO_SIGNET_RATIO = 122.46 / 103;
+// Gestapelte Variante (Signet ueber dem Schriftzug), sitzt auf der Rueckseite
+// unten in der Nachrichtenspalte. Verhaeltnis aus dem viewBox (396.85 x 222.05).
+const LOGO_STACKED_SRC = 'assets/AIG_logotype_signet_oben_wald.svg';
+const LOGO_STACKED_RATIO = 396.85 / 222.05;
 
 // Briefmarken-Motive. Die Dateien bringen ihren Zackenrand selbst mit und
 // sind freigestellt — drawStamp() zeichnet deshalb keinen goldenen Rahmen
@@ -31,6 +35,24 @@ const STAMPS = [
   { id: 'wasserrad',      label: 'Wasserrad',      src: 'assets/AIG_marke_wasserrad.webp' }
 ];
 
+// Sticker liegen auf der RUECKSEITE unter den Adresszeilen, in festen Plaetzen
+// (bis zu MAX_STICKERS Stueck, dasselbe Motiv auch mehrfach). Die Vorderseite
+// bleibt bewusst frei: dort gehoert nur das Foto hin. Wie bei den Briefmarken
+// sind die Dateien freigestellt und werden einzeln geladen: fehlt eine, bleiben
+// die uebrigen waehlbar, und ein Sticker wird nur angeboten, wenn sein Bild da
+// ist.
+const STICKERS = [
+  { id: 'bad-wildbad',      label: 'Bad Wildbad',               src: 'assets/AIG_sticker_bad_wildbad.webp' },
+  { id: 'baumwipfelpfad',   label: 'Baumwipfelpfad',            src: 'assets/AIG_sticker_baumwipfelpfad.webp' },
+  { id: 'palais-thermal',   label: 'Palais Thermal',            src: 'assets/AIG_sticker_palais_thermal.webp' },
+  { id: 'paragliding',      label: 'Paragliding',               src: 'assets/AIG_sticker_paragliding.webp' },
+  { id: 'kirschtorte',      label: 'Schwarzwälder Kirschtorte', src: 'assets/AIG_sticker_kirschtorte.webp' },
+  { id: 'marie',            label: 'Schwarzwald Marie',         src: 'assets/AIG_sticker_marie.webp' },
+  { id: 'wild-blue-forest', label: 'Wild Blue Forest',          src: 'assets/AIG_sticker_wild_blue_forest.webp' },
+  { id: 'wildline',         label: 'Wildline',                  src: 'assets/AIG_sticker_wildline.webp' }
+];
+const MAX_STICKERS = 4;
+
 const COLORS = {
   wald: '#253C28',
   wald2: '#4A613C',
@@ -44,9 +66,11 @@ const COLORS = {
   gold3: '#FFD962'
 };
 
-// Zwei feste Kartenformate (gleiches Pixelbudget, nur transponiert), statt
-// des beliebigen Seitenverhältnisses des Originalfotos. Vorder- und
-// Rückseite werden immer gemeinsam über applyFormat() gesetzt.
+// Nur Querformat. Hochformat war frueher als zweites Format vorhanden, sah
+// aber nicht gut aus (Rueckseite und Stapel-Export) und wurde am 2026-09-29
+// gestrichen. Hochformatfotos werden ueber den Zuschneide-Dialog auf das
+// Querformat zugeschnitten. applyFormat()/state.format bleiben bestehen, weil
+// der Abbrechen-Pfad des Dialogs damit arbeitet.
 const FORMATS = {
   // 1,7x der urspruenglichen 1697x1200. Die gesamte Layout-Mathematik rechnet
   // in Anteilen von canvas.width/height, deshalb aendert eine hoehere
@@ -57,14 +81,8 @@ const FORMATS = {
   // 2880x4112 sind 11,8 Megapixel und lassen Luft zur Canvas-Grenze von iOS
   // Safari (16,7 MP), ab der ein Canvas ohne Fehlermeldung leer bleibt.
   // Die Renderzeit spielt keine Rolle (gemessen 0,1–0,2 ms pro Rueckseite).
-  landscape: { width: 2880, height: 2036 },
-  portrait: { width: 2036, height: 2880 }
+  landscape: { width: 2880, height: 2036 }
 };
-const SQUARE_TOLERANCE = 0.08; // Fotos bis ~8% "höher als breit" zählen noch als Querformat
-
-function pickFormat(imgW, imgH) {
-  return (imgW / imgH) >= (1 - SQUARE_TOLERANCE) ? 'landscape' : 'portrait';
-}
 
 const state = {
   photo: null,
@@ -83,7 +101,10 @@ const state = {
   format: null,
   // id aus STAMPS. Startwert ist das erste Motiv; faellt auf die gezeichnete
   // Signet-Marke zurueck, wenn die Bilddatei nicht geladen werden konnte.
-  stamp: STAMPS[0].id
+  stamp: STAMPS[0].id,
+  // Ids aus STICKERS in der Reihenfolge der Plaetze (Index = Platz, max.
+  // MAX_STICKERS). Wird ein Sticker entfernt, ruecken die uebrigen nach.
+  stickers: []
 };
 
 // Einzige Schreibstelle für photo + crop — erzwingt die Invariante oben.
@@ -92,9 +113,10 @@ function setPhoto(img, crop) {
   state.crop = crop;
 }
 
-const logos = { full: null, signet: null, fullDust: null };
+const logos = { full: null, signet: null, fullDust: null, stacked: null };
 // id -> Image, oder null wenn die Datei fehlt/nicht geladen werden konnte.
 const stampImages = {};
+const stickerImages = {};
 
 // ---------------- DOM refs ----------------
 const canvasFront = document.getElementById('canvas-front');
@@ -120,6 +142,9 @@ const charCount = document.getElementById('char-count');
 const btnRecrop = document.getElementById('btn-recrop');
 const stampGroup = document.getElementById('stamp-group');
 const stampChoices = [...document.querySelectorAll('.stamp-choice')];
+const stickerGroup = document.getElementById('sticker-group');
+const stickerCount = document.getElementById('sticker-count');
+const stickerChoices = [...document.querySelectorAll('.sticker-choice')];
 const cropDialog = document.getElementById('crop-dialog');
 const cropStage = document.getElementById('crop-stage');
 const cropCanvas = document.getElementById('crop-canvas');
@@ -138,13 +163,13 @@ function loadImage(src) {
   });
 }
 
-function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
-  const paragraphs = text.split('\n');
-  let lines = [];
-  paragraphs.forEach(paragraph => {
-    const words = paragraph.split(' ');
+// Bricht text an Leerzeichen und Zeilenumbruechen auf Zeilen der Breite maxWidth
+// um und gibt sie als Array zurueck (ohne zu zeichnen).
+function wrapLines(ctx, text, maxWidth) {
+  const lines = [];
+  text.split('\n').forEach(paragraph => {
     let currentLine = '';
-    words.forEach(word => {
+    paragraph.split(' ').forEach(word => {
       const testLine = currentLine ? currentLine + ' ' + word : word;
       if (ctx.measureText(testLine).width > maxWidth && currentLine) {
         lines.push(currentLine);
@@ -155,6 +180,11 @@ function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
     });
     lines.push(currentLine);
   });
+  return lines;
+}
+
+function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+  const lines = wrapLines(ctx, text, maxWidth);
   lines.forEach((line, i) => {
     ctx.fillText(line, x, y + i * lineHeight);
   });
@@ -341,6 +371,112 @@ function drawStamp(ctx, x, y, w, h) {
   }
 }
 
+// Einpassen (contain) eines Bildes in ein Quadrat, zentriert. Die Sticker sind
+// hoch, quer oder quadratisch und sollen nie verzerrt werden.
+function containInSquare(img, x, y, size) {
+  const ratio = img.naturalWidth / img.naturalHeight;
+  const w = ratio >= 1 ? size : size * ratio;
+  const h = ratio >= 1 ? size / ratio : size;
+  return { x: x + (size - w) / 2, y: y + (size - h) / 2, w, h };
+}
+
+// Zeichnet die vier Sticker-Plaetze in den uebergebenen Platz (x/y/w/h =
+// maximal verfuegbar, nicht Zielmass): ein 2x2-Raster fester Zellen, horizontal
+// zentriert. Belegte Zellen zeigen ihren Sticker (contain, nie verzerrt).
+// showSlots zeichnet zusaetzlich die freien Zellen gestrichelt mit ihrer
+// Nummer — das ist nur Bedienhilfe der Vorschau und darf nie im Export landen
+// (dort ist der Parameter aus). Ohne Sticker und ohne showSlots bleibt der
+// Bereich komplett leer.
+function drawBackStickers(ctx, x, y, w, h, showSlots) {
+  if (w <= 0 || h <= 0) return;
+  if (!showSlots && !state.stickers.length) return;
+  const gap = Math.min(w, h) * 0.04;
+  // Deckel bei 15 % der Kartenbreite: bei querformatigen Briefmarken wird der
+  // Platz hoeher, und die Sticker sollen nicht mit der Marke die Groesse
+  // wechseln.
+  const cell = Math.max(Math.min((w - gap) / 2, (h - gap) / 2, ctx.canvas.width * 0.15), 0);
+  const gridW = cell * 2 + gap;
+  const startX = x + (w - gridW) / 2;
+
+  for (let i = 0; i < MAX_STICKERS; i++) {
+    const cx = startX + (i % 2) * (cell + gap);
+    const cy = y + Math.floor(i / 2) * (cell + gap);
+    const img = stickerImages[state.stickers[i]];
+
+    if (img) {
+      const box = containInSquare(img, cx, cy, cell);
+      // Dezenter Schatten, damit der Sticker wie aufgeklebt wirkt.
+      ctx.save();
+      ctx.shadowColor = 'rgba(15, 26, 17, 0.28)';
+      ctx.shadowBlur = cell * 0.03;
+      ctx.shadowOffsetY = cell * 0.012;
+      ctx.drawImage(img, box.x, box.y, box.w, box.h);
+      ctx.restore();
+    } else if (showSlots && !state.stickers[i]) {
+      ctx.save();
+      ctx.strokeStyle = COLORS.wald3;
+      ctx.fillStyle = COLORS.wald3;
+      ctx.globalAlpha = 0.7;
+      ctx.lineWidth = Math.max(2, cell * 0.012);
+      ctx.setLineDash([cell * 0.05, cell * 0.04]);
+      drawRoundedRect(ctx, cx, cy, cell, cell, cell * 0.08);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.font = `600 ${cell * 0.36}px ${getFontStack('heading')}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(i + 1), cx + cell / 2, cy + cell / 2);
+      ctx.restore();
+    }
+  }
+}
+
+// Eine Adresszeile: Beschriftung ("An:" / "Von:") links in Zilla Slab,
+// der eingegebene Name kursiv direkt dahinter. Passt
+// der Name nicht, wird die Schrift zuerst bis auf 70 % verkleinert, erst dann
+// mit Ellipse gekuerzt — das Eingabefeld erlaubt 40 Zeichen.
+function drawAddressLine(ctx, label, name, x, lineY, maxWidth, fontSize) {
+  const baseline = lineY - fontSize * 0.14;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  // Beschriftung in Zilla Slab (Ueberschriftenschrift der Guideline).
+  ctx.font = `600 ${fontSize}px ${getFontStack('heading')}`;
+  ctx.fillText(label, x, baseline);
+  if (!name) return;
+
+  const pad = fontSize * 0.3;
+  const nameStart = x + ctx.measureText(label).width + pad;
+  const nameWidth = x + maxWidth - nameStart;
+  let size = fontSize * 1.05;
+  const setFont = () => { ctx.font = `italic 500 ${size}px ${getFontStack('body')}`; };
+  setFont();
+  while (ctx.measureText(name).width > nameWidth && size > fontSize * 0.7) {
+    size -= fontSize * 0.02;
+    setFont();
+  }
+  const text = ctx.measureText(name).width > nameWidth
+    ? fitLines(ctx, name, nameWidth, 1)[0]
+    : name;
+  // Direkt hinter dem Doppelpunkt, linksbuendig.
+  ctx.fillText(text, nameStart, baseline);
+}
+
+// Kamera-Symbol fuer den leeren Fotoplatz, gezeichnet statt als Emoji (ein
+// Emoji kaeme aus einer Systemschrift, erlaubt sind nur die Guideline-Schriften).
+function drawCameraIcon(ctx, cx, cy, size) {
+  ctx.save();
+  ctx.translate(cx - size / 2, cy - size / 2);
+  ctx.scale(size / 24, size / 24);
+  ctx.strokeStyle = COLORS.wald;
+  ctx.lineWidth = 1.8;
+  ctx.lineJoin = 'round';
+  ctx.stroke(new Path2D('M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z'));
+  ctx.beginPath();
+  ctx.arc(12, 13, 3.5, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
 // ---------------- Rendering ----------------
 function renderFrontTo(canvas, ctx) {
   setHighQuality(ctx);
@@ -385,7 +521,7 @@ function renderFrontTo(canvas, ctx) {
     ctx.font = `600 ${pw * 0.09}px ${getFontStack('heading')}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('📷', px + pw / 2, py + ph / 2 - pw * 0.06);
+    drawCameraIcon(ctx, px + pw / 2, py + ph / 2 - pw * 0.06, pw * 0.09);
     ctx.font = `500 ${pw * 0.05}px ${getFontStack('body')}`;
     ctx.fillText('Foto hochladen', px + pw / 2, py + ph / 2 + pw * 0.08);
   }
@@ -426,7 +562,7 @@ function renderFront() {
   renderFrontTo(canvasFront, ctxFront);
 }
 
-function renderBackTo(canvas, ctx) {
+function renderBackTo(canvas, ctx, showSlots) {
   setHighQuality(ctx);
   const w = canvas.width;
   const h = canvas.height;
@@ -436,7 +572,9 @@ function renderBackTo(canvas, ctx) {
   ctx.fillRect(0, 0, w, h);
 
   const margin = w * 0.06;
-  const dividerX = w * 0.56;
+  // Bewusst links von der Mitte: die Nachrichtenspalte ist schmaler als frueher,
+  // damit rechts genug Breite fuer Adresszeilen und Sticker bleibt.
+  const dividerX = w * 0.5;
 
   // Trennlinie
   ctx.strokeStyle = COLORS.wald3;
@@ -453,61 +591,88 @@ function renderBackTo(canvas, ctx) {
   const msgY = margin + 10;
   const msgWidth = dividerX - margin * 1.6;
 
+  // Logo unten in der Nachrichtenspalte (gestapelte Variante), mittig unter den
+  // Schreiblinien. Die Nachricht endet oberhalb davon.
+  const lineEndX = dividerX - margin * 0.6;
+  const logoH = h * 0.135;
+  const logoTop = h - margin - logoH;
+  const msgBottom = logoTop - h * 0.03;
+  drawLogo(ctx, logos.stacked, LOGO_STACKED_RATIO, (msgX + lineEndX) / 2, logoTop, logoH, 'center');
+
   ctx.fillStyle = COLORS.graphite;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
-  const fontSize = w * 0.032;
-  const lineHeight = fontSize * 1.5;
-  ctx.font = `500 ${fontSize}px ${getFontStack('body')}`;
-
   const message = state.message || 'Deine persönliche Nachricht erscheint hier ...';
+
+  // Schrift bis auf 70 % verkleinern, falls die (maximal 200 Zeichen lange)
+  // Nachricht sonst in das Logo liefe. Im Normalfall bleibt es bei voller Groesse.
+  // Schrift wie bei den Namen in den Adresszeilen (Asap Condensed Italic 500).
+  // Der Text beginnt eine Zeile tiefer als frueher (msgTop), der Nachrichten-
+  // bereich ist damit von oben um eine Zeile kleiner.
+  const baseFontSize = w * 0.032;
+  let fontSize = baseFontSize;
+  let lineHeight;
+  let lines;
+  let msgTop;
+  for (;;) {
+    lineHeight = fontSize * 1.5;
+    msgTop = msgY + lineHeight;
+    ctx.font = `italic 500 ${fontSize}px ${getFontStack('body')}`;
+    lines = wrapLines(ctx, message, msgWidth);
+    const lastBaseline = msgTop + lineHeight + (lines.length - 1) * lineHeight;
+    if (lastBaseline <= msgBottom || fontSize <= baseFontSize * 0.7) break;
+    fontSize *= 0.96;
+  }
   ctx.globalAlpha = state.message ? 1 : 0.45;
 
-  // dezente Schreiblinien
+  // dezente Schreiblinien, nur bis zum Logo
   ctx.save();
   ctx.strokeStyle = COLORS.wald3;
   ctx.globalAlpha = 0.25;
   ctx.lineWidth = 1.5;
-  for (let ly = msgY + lineHeight; ly < h - margin; ly += lineHeight) {
+  for (let ly = msgTop + lineHeight; ly <= msgBottom; ly += lineHeight) {
     ctx.beginPath();
     ctx.moveTo(msgX, ly);
-    ctx.lineTo(dividerX - margin * 0.6, ly);
+    ctx.lineTo(lineEndX, ly);
     ctx.stroke();
   }
   ctx.restore();
 
-  wrapText(ctx, message, msgX, msgY + lineHeight, msgWidth, lineHeight);
+  lines.forEach((line, i) => ctx.fillText(line, msgX, msgTop + lineHeight + i * lineHeight));
   ctx.globalAlpha = 1;
 
-  // Rechte Seite: Briefmarke + Adresse
-  // Bewusst groesser als eine echte Briefmarke (die belegt rund 16% der
-  // Kartenbreite): die Motive tragen Beschriftung, die bei 20% im Export
-  // nicht mehr lesbar war.
-  const stampW = w * 0.26;
+  // Rechte Seite: Briefmarke, Adresszeilen, Sticker
+  // Die Marke ist klein (rund 17 % der Kartenbreite, etwa wie eine echte
+  // Briefmarke). Adresszeilen und Sticker richten sich bewusst nach dem
+  // MAXIMALEN Markenplatz (stampH), nicht nach der tatsaechlich gezeichneten
+  // Hoehe: sonst wuerden sie beim Wechsel zwischen hoch- und querformatiger
+  // Marke springen. Die Anordnung ist fuer jedes Motiv identisch.
+  const stampW = w * 0.17;
   const stampH = stampW * 1.2;
   const stampX = w - margin - stampW;
   const stampY = margin;
   const stampArt = stampImages[state.stamp];
-  // Tatsaechliche Markenhoehe: bei den Motiven formatabhaengig, sonst der
-  // volle Platz der gezeichneten Signet-Marke.
-  let stampDrawnH;
   if (stampArt) {
-    stampDrawnH = drawStampArt(ctx, stampArt, stampX, stampY, stampW, stampH);
+    // Querformatige Motive duerfen breiter sein (bis 23 % der Kartenbreite),
+    // die Hoehe bleibt auf stampH gedeckelt. Hochformatige sind hoehengebunden
+    // und bleiben so gross wie vorher. Die Anordnung darunter aendert sich nie.
+    const artW = stampArt.naturalWidth > stampArt.naturalHeight ? w * 0.23 : stampW;
+    drawStampArt(ctx, stampArt, w - margin - artW, stampY, artW, stampH);
   } else {
     drawStamp(ctx, stampX, stampY, stampW, stampH);
-    stampDrawnH = stampH;
   }
 
-  // Adresszeilen
   const addrX = dividerX + margin * 0.6;
-  const addrTop = stampY + stampDrawnH + h * 0.09;
-  const addrLineGap = h * 0.075;
   const addrWidth = w - margin - addrX;
+
+  // Adresszeilen: eine fuer den Empfaenger, eine fuer den Absender.
+  const addrTop = stampY + stampH + h * 0.045;
+  const addrLineGap = h * 0.08;
 
   ctx.strokeStyle = COLORS.wald2;
   ctx.globalAlpha = 0.5;
   ctx.lineWidth = 2;
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 2; i++) {
     ctx.beginPath();
     ctx.moveTo(addrX, addrTop + i * addrLineGap);
     ctx.lineTo(addrX + addrWidth, addrTop + i * addrLineGap);
@@ -516,40 +681,19 @@ function renderBackTo(canvas, ctx) {
   ctx.globalAlpha = 1;
 
   ctx.fillStyle = COLORS.graphite;
-  ctx.font = `600 ${w * 0.028}px ${getFontStack('body')}`;
-  // Lange Empfängernamen auf zwei Zeilen umbrechen: eine Zeile fasst nur rund
-  // 26 Zeichen, das Eingabefeld erlaubt aber 40 — ohne Umbruch lief der Name
-  // ohne Hinweis über den Kartenrand hinaus. Jede Zeile sitzt auf einer der
-  // vorgezeichneten Adresslinien, die dritte bleibt frei.
-  const recipientPrefix = 'An: ';
-  const recipientName = state.recipientName || '________________';
-  const prefixWidth = ctx.measureText(recipientPrefix).width;
-  const recipientLines = fitLines(
-    ctx, recipientName, addrWidth, 2, addrWidth - prefixWidth
-  );
-  recipientLines.forEach((line, i) => {
-    ctx.fillText(i === 0 ? recipientPrefix + line : line, addrX, addrTop + i * addrLineGap - 8);
-  });
+  const addrFontSize = w * 0.034;
+  drawAddressLine(ctx, 'An:', state.recipientName, addrX, addrTop, addrWidth, addrFontSize);
+  drawAddressLine(ctx, 'Von:', state.senderName, addrX, addrTop + addrLineGap, addrWidth, addrFontSize);
 
-  // Absender auf der dritten, bislang ungenutzten Adresslinie. Gleiche
-  // Ueberlaufsicherung wie beim Empfaenger: fitLines() mit einer Zeile und
-  // schmalerer erster Zeile wegen des Praefixes — kein neuer Umbruchcode.
-  if (state.senderName) {
-    const senderPrefix = 'Von: ';
-    const senderPrefixWidth = ctx.measureText(senderPrefix).width;
-    const senderLines = fitLines(
-      ctx, state.senderName, addrWidth, 1, addrWidth - senderPrefixWidth
-    );
-    ctx.fillText(senderPrefix + senderLines[0], addrX, addrTop + 2 * addrLineGap - 8);
-  }
-
-  // Kleines Logo unten rechts
-  const smallLogoHeight = h * 0.035;
-  drawLogo(ctx, logos.full, LOGO_FULL_RATIO, w - margin, h - margin, smallLogoHeight, 'right');
+  // Sticker unter den Adresszeilen bis zum unteren Kartenrand.
+  const stickerTop = addrTop + addrLineGap + h * 0.04;
+  const stickerBottom = h - margin;
+  drawBackStickers(ctx, addrX, stickerTop, addrWidth, stickerBottom - stickerTop, showSlots);
 }
 
 function renderBack() {
-  renderBackTo(canvasBack, ctxBack);
+  // Nur die Vorschau zeigt die freien, nummerierten Sticker-Plaetze.
+  renderBackTo(canvasBack, ctxBack, true);
 }
 
 // Blendet Motive aus, deren Datei nicht geladen werden konnte, markiert das
@@ -638,10 +782,8 @@ photoInput.addEventListener('change', e => {
       // aktuellen Format, kann also erst nach applyFormat() gefragt werden.
       const snapshot = { photo: state.photo, crop: state.crop, format: state.format };
 
-      // pickFormat() bewertet weiterhin das ORIGINAL-Verhaeltnis. Wuerde es den
-      // Zuschnitt bewerten, entstuende eine Zirkelabhaengigkeit: das
-      // Crop-Verhaeltnis haengt am Format, das Format am Crop.
-      applyFormat(pickFormat(img.naturalWidth, img.naturalHeight));
+      // Immer Querformat, siehe FORMATS.
+      applyFormat('landscape');
 
       // Startwert = bisheriges Verhalten (mittig zugeschnitten).
       const base = coverFit(
@@ -687,6 +829,50 @@ flipWrapper.addEventListener('click', e => {
 function updateShareAvailability() {
   btnShare.disabled = !state.photo;
 }
+
+// ---------------- Sticker ----------------
+// Die Kacheln sind Schalter: Antippen waehlt ein Motiv (jedes hoechstens
+// einmal), die Zahl auf der Kachel ist sein Platz auf der Rueckseite, nochmal
+// Antippen entfernt es. Kacheln erscheinen, sobald ihr Bild geladen ist; bei
+// vier gewaehlten Motiven sind die uebrigen gesperrt. Die Gruppe verschwindet,
+// wenn kein Motiv geladen werden konnte.
+function updateStickerOptions() {
+  let verfuegbar = 0;
+  const voll = state.stickers.length >= MAX_STICKERS;
+  stickerChoices.forEach(btn => {
+    const type = btn.dataset.sticker;
+    const platz = state.stickers.indexOf(type) + 1;
+    const geladen = Boolean(stickerImages[type]);
+    btn.hidden = !geladen;
+    btn.disabled = !platz && voll;
+    btn.setAttribute('aria-pressed', String(platz > 0));
+    if (platz) btn.dataset.number = String(platz);
+    else delete btn.dataset.number;
+    if (geladen) verfuegbar++;
+  });
+  stickerGroup.hidden = verfuegbar === 0;
+  stickerCount.textContent = `${state.stickers.length} / ${MAX_STICKERS}`;
+}
+
+function toggleSticker(type) {
+  const index = state.stickers.indexOf(type);
+  if (index >= 0) {
+    // Nachfolgende Sticker ruecken einen Platz nach vorn.
+    state.stickers.splice(index, 1);
+  } else {
+    if (!stickerImages[type] || state.stickers.length >= MAX_STICKERS) return;
+    state.stickers.push(type);
+  }
+  updateStickerOptions();
+  renderBack();
+  // Die Sticker liegen auf der Rueckseite — dorthin drehen, damit der Gast
+  // sieht, was er gewaehlt hat.
+  if (index < 0 && state.side === 'front') toggleFlip();
+}
+
+stickerChoices.forEach(btn => {
+  btn.addEventListener('click', () => toggleSticker(btn.dataset.sticker));
+});
 
 // ---------------- Zuschneide-Dialog ----------------
 const MAX_ZOOM = 4;
@@ -1076,10 +1262,17 @@ function shareText() {
 // renderAll() stellt sicher, dass garantiert der aktuelle State exportiert
 // wird, unabhängig davon, ob die Canvases zufällig schon aktuell sind.
 function currentExport() {
-  renderAll();
+  // Die Rueckseite wird ohne die nummerierten Sticker-Platzhalter neu gezeichnet
+  // (sie sind nur Bedienhilfe der Vorschau). buildStoryCanvas() zeichnet ohnehin
+  // selbst und laesst sie weg.
+  renderFront();
+  renderBackTo(canvasBack, ctxBack);
   const isStory = shareFormat === 'story';
+  const canvas = isStory ? buildStoryCanvas() : buildCombinedCanvas();
+  // Vorschau wieder mit Platzhaltern (der Export ist bis hier synchron fertig).
+  renderBack();
   return {
-    canvas: isStory ? buildStoryCanvas() : buildCombinedCanvas(),
+    canvas,
     filename: isStory
       ? 'ab-ins-gruene-postkarte-story.png'
       : 'ab-ins-gruene-postkarte.png',
@@ -1138,12 +1331,14 @@ updateRecropAvailability();
 Promise.all([
   loadImage(LOGO_FULL_SRC),
   loadImage(LOGO_SIGNET_SRC),
-  loadImage(LOGO_FULL_DUST_SRC)
+  loadImage(LOGO_FULL_DUST_SRC),
+  loadImage(LOGO_STACKED_SRC)
 ])
-  .then(([full, signet, fullDust]) => {
+  .then(([full, signet, fullDust, stacked]) => {
     logos.full = full;
     logos.signet = signet;
     logos.fullDust = fullDust;
+    logos.stacked = stacked;
     renderAll();
   })
   .catch(() => {
@@ -1170,9 +1365,32 @@ STAMPS.forEach(stamp => {
     });
 });
 
+// Sticker ebenfalls einzeln laden, aus demselben Grund wie die Briefmarken.
+STICKERS.forEach(sticker => {
+  loadImage(sticker.src)
+    .then(img => {
+      stickerImages[sticker.id] = img;
+      updateStickerOptions();
+    })
+    .catch(() => {
+      stickerImages[sticker.id] = null;
+      updateStickerOptions();
+    });
+});
+
 // Web-Fonts (Zilla Slab / Asap Condensed) laden asynchron; Canvas-Text, das
 // vor Ladeende gezeichnet wurde, nutzt Fallback-Metriken. Einmaliger
 // Re-Render nach Ladeende korrigiert Zeilenumbruch/Positionierung verlässlich.
 if (document.fonts && document.fonts.ready) {
-  document.fonts.ready.then(() => renderAll());
+  // Canvas-Text loest kein Laden von Web-Fonts aus. Deshalb jeden im Canvas
+  // benutzten Schnitt der beiden Guideline-Schriften (Asap Condensed, Zilla Slab)
+  // explizit anfordern und erst danach zeichnen — sonst erscheint kurz (oder bei
+  // einem Ladefehler dauerhaft) eine Ersatzschrift.
+  Promise.all([
+    document.fonts.load("500 40px 'Asap Condensed'"),
+    document.fonts.load("600 40px 'Asap Condensed'"),
+    document.fonts.load("italic 500 40px 'Asap Condensed'"),
+    document.fonts.load("600 40px 'Zilla Slab'"),
+    document.fonts.ready
+  ]).then(() => renderAll());
 }

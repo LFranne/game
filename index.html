@@ -6,7 +6,7 @@
   <title>Ab ins Grüne – Postkarten-Generator</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Zilla+Slab:wght@400;600;700&family=Asap+Condensed:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Zilla+Slab:wght@400;600;700&family=Asap+Condensed:ital,wght@0,400;0,500;0,600;0,700;1,500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="postkarte.css">
 </head>
 <body>
@@ -39,7 +39,7 @@
            Teilen-Bedienung sitzt deshalb in der Formularspalte. -->
       <div class="preview-actions">
         <button type="button" id="btn-flip" class="btn btn-secondary">
-          <span class="btn-icon" aria-hidden="true">&#8635;</span> Karte umdrehen
+          <svg class="btn-icon" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4v4h-4"/></svg> Karte umdrehen
         </button>
       </div>
     </section>
@@ -48,11 +48,11 @@
       <div class="form-group">
         <label for="photo-input" class="form-label">Dein Urlaubsfoto</label>
         <label for="photo-input" class="upload-button">
-          <span class="btn-icon" aria-hidden="true">&#128247;</span> Foto hochladen
+          <svg class="btn-icon" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.5"/></svg> Foto hochladen
         </label>
         <input type="file" id="photo-input" accept="image/*" class="visually-hidden">
         <button type="button" id="btn-recrop" class="btn btn-secondary form-button" hidden>
-          <span class="btn-icon" aria-hidden="true">&#9986;</span> Ausschnitt anpassen
+          <svg class="btn-icon" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M8.5 7.5 20 19M8.5 16.5 20 5"/></svg> Ausschnitt anpassen
         </button>
       </div>
 
@@ -87,6 +87,41 @@
         </div>
       </div>
 
+      <!-- Sticker liegen auf der Rueckseite unter den Adresszeilen (feste
+           Plaetze, siehe drawBackStickers in postkarte.js). Die Kacheln sind
+           Schalter und werden von updateStickerOptions() eingeblendet, sobald
+           ihre Datei geladen ist; die Zahl darauf ist der Platz auf der Karte. -->
+      <div class="form-group sticker-group" id="sticker-group" hidden>
+        <span class="form-label">Sticker <span class="sticker-count" id="sticker-count">0 / 4</span></span>
+        <div class="sticker-choices" role="group" aria-label="Sticker auswählen">
+          <button type="button" class="sticker-choice" data-sticker="wildline" aria-label="Sticker Wildline" aria-pressed="false" hidden>
+            <img src="assets/AIG_sticker_wildline.webp" alt="" loading="lazy">
+          </button>
+          <button type="button" class="sticker-choice" data-sticker="baumwipfelpfad" aria-label="Sticker Baumwipfelpfad" aria-pressed="false" hidden>
+            <img src="assets/AIG_sticker_baumwipfelpfad.webp" alt="" loading="lazy">
+          </button>
+          <button type="button" class="sticker-choice" data-sticker="palais-thermal" aria-label="Sticker Palais Thermal" aria-pressed="false" hidden>
+            <img src="assets/AIG_sticker_palais_thermal.webp" alt="" loading="lazy">
+          </button>
+          <button type="button" class="sticker-choice" data-sticker="paragliding" aria-label="Sticker Paragliding" aria-pressed="false" hidden>
+            <img src="assets/AIG_sticker_paragliding.webp" alt="" loading="lazy">
+          </button>
+          <button type="button" class="sticker-choice" data-sticker="kirschtorte" aria-label="Sticker Schwarzwälder Kirschtorte" aria-pressed="false" hidden>
+            <img src="assets/AIG_sticker_kirschtorte.webp" alt="" loading="lazy">
+          </button>
+          <button type="button" class="sticker-choice" data-sticker="marie" aria-label="Sticker Schwarzwald Marie" aria-pressed="false" hidden>
+            <img src="assets/AIG_sticker_marie.webp" alt="" loading="lazy">
+          </button>
+          <button type="button" class="sticker-choice" data-sticker="wild-blue-forest" aria-label="Sticker Wild Blue Forest" aria-pressed="false" hidden>
+            <img src="assets/AIG_sticker_wild_blue_forest.webp" alt="" loading="lazy">
+          </button>
+          <button type="button" class="sticker-choice" data-sticker="bad-wildbad" aria-label="Sticker Bad Wildbad" aria-pressed="false" hidden>
+            <img src="assets/AIG_sticker_bad_wildbad.webp" alt="" loading="lazy">
+          </button>
+        </div>
+        <p class="sticker-hint">Antippen wählt einen Sticker. Die Zahl zeigt seinen Platz auf der Rückseite, nochmal antippen entfernt ihn. Bis zu 4.</p>
+      </div>
+
       <div class="form-group">
         <label for="message-input" class="form-label">Deine Nachricht</label>
         <textarea id="message-input" class="form-textarea" rows="6" maxlength="200" placeholder="Liebe Grüße aus dem Schwarzwald ..."></textarea>
@@ -102,7 +137,7 @@
         </div>
 
         <button type="button" id="btn-share" class="btn btn-primary share-button" disabled>
-          <span class="btn-icon" aria-hidden="true">&#8593;</span> Teilen
+          <svg class="btn-icon" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="M6 11l6-6 6 6"/></svg> Teilen
         </button>
         <p class="share-status" id="share-status" role="status" aria-live="polite"></p>
 
