@@ -1112,9 +1112,8 @@ cropDialog.addEventListener('cancel', e => {
 btnRecrop.addEventListener('click', () => openCropDialog());
 
 // ---------------- Teilen / Export ----------------
-// Story-Format 9:16 für Instagram Story / WhatsApp-Status. Bewusst eine eigene
-// Funktion neben buildCombinedCanvas(): Letztere ist die unveränderte Quelle für
-// den normalen Export und wird hier nicht angefasst.
+// Story-Format 9:16 für Instagram Story / WhatsApp-Status. Eigene Funktion neben
+// buildCombinedCanvas() ("Beide Seiten"): anderes Seitenverhältnis, Logo unten.
 // Der Story-Export war lange der schlechteste Pfad: zwei Karten uebereinander
 // in ein 9:16-Bild zwingt die Karte auf die Breite des Rahmens herunter. Bei
 // 1350px Rahmenbreite landete die 2546px breite Karte bei 1148px — also 45%,
@@ -1177,8 +1176,7 @@ function buildStoryCanvas() {
   ctx.fillRect(0, 0, STORY.width, STORY.height);
 
   // Vorder- und Rückseite direkt auf den Verlauf stapeln, damit zwischen den
-  // Karten der Hintergrund durchscheint. buildCombinedCanvas() wäre hier falsch:
-  // dessen wald-farbene Fläche läge als dunkler Kasten auf dem Verlauf.
+  // Karten der Hintergrund durchscheint (wie auch bei "Beide Seiten").
   const cardW = canvasFront.width;
   const cardH = canvasFront.height;
   const gapSource = cardH * 0.05;
@@ -1225,17 +1223,39 @@ function buildStoryCanvas() {
 }
 
 
+function fillBrandGradient(ctx, w, h) {
+  const bg = ctx.createLinearGradient(0, 0, 0, h);
+  bg.addColorStop(0, COLORS.wald);
+  bg.addColorStop(0.45, COLORS.wald2);
+  bg.addColorStop(1, COLORS.wald3);
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, w, h);
+}
+
+// "Beide Seiten": Vorder- und Rueckseite untereinander. Fruehere Fassung hat die
+// beiden fertigen Canvases mit harten Ecken auf eine dunkle Flaeche gelegt — das
+// wirkte abgeschnitten, die runden Kartenecken fehlten. Jetzt sitzen beide
+// Karten wie in der Story mit runden Ecken und Schatten auf dem Markenverlauf.
+// Die Karten werden in Zielgroesse neu gezeichnet (90 % der Kartenbreite, der
+// Rest ist Rand), die Rueckseite ohne die Sticker-Platzhalter der Vorschau.
+// Breite bleibt 2880 px; Hoehe ~4060 px = 11,7 MP, unter der iOS-Canvas-Grenze.
 function buildCombinedCanvas() {
-  const gap = 40;
+  const W = canvasFront.width;
+  const cardW = Math.round(W * 0.9);
+  const cardH = Math.round(canvasFront.height * 0.9);
+  const pad = Math.round(W * 0.05);
+  const gap = Math.round(pad * 0.75);
+  const H = pad * 2 + cardH * 2 + gap;
+
   const combined = document.createElement('canvas');
-  combined.width = canvasFront.width;
-  combined.height = canvasFront.height * 2 + gap;
+  combined.width = W;
+  combined.height = H;
   const ctx = combined.getContext('2d');
   setHighQuality(ctx);
-  ctx.fillStyle = COLORS.wald;
-  ctx.fillRect(0, 0, combined.width, combined.height);
-  ctx.drawImage(canvasFront, 0, 0);
-  ctx.drawImage(canvasBack, 0, canvasFront.height + gap);
+  fillBrandGradient(ctx, W, H);
+
+  drawCardOnStory(ctx, renderCardAt(renderFrontTo, cardW, cardH), pad, pad, cardW, cardH);
+  drawCardOnStory(ctx, renderCardAt(renderBackTo, cardW, cardH), pad, pad + cardH + gap, cardW, cardH);
   return combined;
 }
 
@@ -1245,11 +1265,10 @@ let shareFormat = 'both';
 
 function setShareFormat(key) {
   shareFormat = key;
-  const storyActive = key === 'story';
-  fmtStory.classList.toggle('is-active', storyActive);
-  fmtBoth.classList.toggle('is-active', !storyActive);
-  fmtStory.setAttribute('aria-pressed', String(storyActive));
-  fmtBoth.setAttribute('aria-pressed', String(!storyActive));
+  [[fmtBoth, 'both'], [fmtStory, 'story']].forEach(([btn, id]) => {
+    btn.classList.toggle('is-active', key === id);
+    btn.setAttribute('aria-pressed', String(key === id));
+  });
   shareStatus.textContent = '';
 }
 
@@ -1259,25 +1278,24 @@ function shareText() {
     : 'Schau dir meine Postkarte aus dem Schwarzwald an!';
 }
 
-// renderAll() stellt sicher, dass garantiert der aktuelle State exportiert
-// wird, unabhängig davon, ob die Canvases zufällig schon aktuell sind.
+// Alle Exporte zeichnen die Karten selbst in Zielgroesse aus dem State neu und
+// fassen die Vorschau-Canvases nicht an — die Vorschau (mit den nummerierten
+// Sticker-Platzhaltern) bleibt dadurch unberuehrt, und nichts davon landet im
+// geteilten Bild.
 function currentExport() {
-  // Die Rueckseite wird ohne die nummerierten Sticker-Platzhalter neu gezeichnet
-  // (sie sind nur Bedienhilfe der Vorschau). buildStoryCanvas() zeichnet ohnehin
-  // selbst und laesst sie weg.
-  renderFront();
-  renderBackTo(canvasBack, ctxBack);
-  const isStory = shareFormat === 'story';
-  const canvas = isStory ? buildStoryCanvas() : buildCombinedCanvas();
-  // Vorschau wieder mit Platzhaltern (der Export ist bis hier synchron fertig).
-  renderBack();
-  return {
-    canvas,
-    filename: isStory
-      ? 'ab-ins-gruene-postkarte-story.png'
-      : 'ab-ins-gruene-postkarte.png',
-    isStory
+  const exports = {
+    both: () => ({
+      canvas: buildCombinedCanvas(),
+      filename: 'ab-ins-gruene-postkarte.png',
+      saved: 'Postkarte wurde gespeichert!'
+    }),
+    story: () => ({
+      canvas: buildStoryCanvas(),
+      filename: 'ab-ins-gruene-postkarte-story.png',
+      saved: 'Story-Bild wurde gespeichert!'
+    })
   };
+  return exports[shareFormat]();
 }
 
 function saveBlob(blob, filename) {
@@ -1292,7 +1310,7 @@ function saveBlob(blob, filename) {
 }
 
 async function sharePostcard() {
-  const { canvas: source, filename, isStory } = currentExport();
+  const { canvas: source, filename, saved } = currentExport();
   source.toBlob(async blob => {
     if (!blob) return;
     const file = new File([blob], filename, { type: 'image/png' });
@@ -1314,9 +1332,7 @@ async function sharePostcard() {
     }
 
     saveBlob(blob, filename);
-    shareStatus.textContent = isStory
-      ? 'Story-Bild wurde gespeichert!'
-      : 'Postkarte wurde gespeichert!';
+    shareStatus.textContent = saved;
   }, 'image/png');
 }
 

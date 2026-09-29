@@ -17,7 +17,7 @@ Fertig und im Browser gegengeprüft:
 - **Empfänger** und **Absender** (je `maxlength="40"`), **Nachricht** (200 Zeichen mit Zähler) — alle mit Überlaufsicherung, Text kann nie über den Kartenrand laufen
 - **Briefmarken-Auswahl**: vier gestaltete Motive, Auswahl über Bildkacheln in der Formularspalte
 - **Vorder-/Rückseite** mit CSS-3D-Flip
-- **Teilen** über genau einen Button: `navigator.share` mit Datei, sonst Download. Zwei Formate wählbar: „Beide Seiten" (2880×4112) oder **„Story 9:16"** (2700×4800, für Instagram Story und WhatsApp-Status)
+- **Teilen** über genau einen Button: `navigator.share` mit Datei, sonst Download. Zwei Formate wählbar: **„Beide Seiten"** (2880×4060, runde Karten mit Schatten auf dem Markenverlauf) und **„Story 9:16"** (2700×4800, für Instagram Story und WhatsApp-Status). Zwei Formate; alles ohne Server.
 - **Klebende Kartenvorschau** auf dem Smartphone, damit die Karte beim Tippen sichtbar bleibt
 
 **Git:** Branch `master`, Commit `cfb6300`, **gepusht und live**. Der Remote `github.com/LFranne/game` ist **öffentlich**; die Veröffentlichung ist bewusst erfolgt. Frühere Fassungen dieses Dokuments stecken in `16321ad` und `efbfdf6`, falls Details zur Historie gebraucht werden.
@@ -100,10 +100,17 @@ Das hier sind die nicht offensichtlichen Stellen. Wer sie übersieht, baut funkt
 - **Vorschau größer:** ab 900 px Breite bis 680 px (vorher 420 px), das Formular hat feste 420 px.
 - Nicht gebaut, da nicht gewünscht: freie Platzierung, Größe, Drehen. Eine frühere Fassung mit freiem Ziehen auf der Vorderseite ist verworfen.
 
+**Export-Formate (Stand 2026-09-29)**
+
+- Beide Exporte (`buildCombinedCanvas`, `buildStoryCanvas`) zeichnen die Karten selbst in Zielgröße aus dem State neu (`renderCardAt`) und fassen die Vorschau-Canvases nicht an. Dadurch landen die nummerierten Sticker-Platzhalter der Vorschau nie im geteilten Bild, und `currentExport()` braucht keine Render-Tricks mehr. `drawCardOnStory()` liefert runde Ecken und Schatten für beide.
+- **„Beide Seiten" war früher hart abgeschnitten** (fertige Canvases mit eckigen Ecken auf dunkler Fläche, die schöne Rundung fehlte). Nicht wieder auf `drawImage(canvasFront/Back)` zurückbauen.
+- **Umschlag-Export: gebaut und auf Wunsch wieder entfernt** (Franziska fand die Optik nicht schön). Nicht ungefragt neu bauen. Falls ein Umschlag später beim Link-Teilen (Phase 2) wiederkommt, neu gestalten statt diese Fassung zu übernehmen.
+- Teilen per **Link** bleibt Phase 2 (braucht Server). Entscheidung 2026-09-29: vorerst ohne Server, es bleibt beim Bild-Export.
+
 **Canvas und Export**
 
 - **`imageSmoothingQuality` steht per Vorgabe auf `'low'`** — ein billiger Filter, der bei jedem Verkleinern Detail kostet: Urlaubsfoto auf Kartenbreite, Markenmotiv, Story-Export. `setHighQuality(ctx)` setzt ihn auf `'high'` und muss **am Anfang jeder Zeichenfunktion** stehen, nicht einmalig im Init: Das Setzen von `canvas.width` setzt den gesamten Kontextzustand zurück, also auch diese Einstellung.
-- **Auflösungsgrenze ist der gestapelte Export.** Karte 2880×2036 ergibt „Beide Seiten" mit 2880×4112 = 11,8 MP. Darüber wird es riskant: **iOS Safari begrenzt Canvas auf rund 16,7 MP** und liefert darüber ohne Fehlermeldung ein leeres Canvas. Die Renderzeit ist kein Argument dagegen (gemessen 0,1–0,2 ms pro Rückseite) — die Grenze ist allein der Speicher.
+- **Auflösungsgrenze ist der gestapelte Export.** Karte 2880×2036 ergibt „Beide Seiten" mit 2880×4060 = 11,7 MP. Darüber wird es riskant: **iOS Safari begrenzt Canvas auf rund 16,7 MP** und liefert darüber ohne Fehlermeldung ein leeres Canvas. Die Renderzeit ist kein Argument dagegen (gemessen 0,1–0,2 ms pro Rückseite) — die Grenze ist allein der Speicher.
 - **Die Story zeichnet die Karten in Zielgröße neu**, statt die fertigen Vorschau-Canvases zu verkleinern. Dafür nehmen `renderFrontTo(canvas, ctx)` und `renderBackTo(canvas, ctx)` ein beliebiges Ziel entgegen; `renderCardAt()` legt das Offscreen-Canvas an. Vorher wurde jedes Element zweimal resampled (Foto → Karte → Story, Marke 1400 → 749 → 597) — sichtbar weich bei Text und Markenbeschriftung.
 - **Die Markengröße in der Story hängt allein von `STORY.width` ab**, nicht von der Kartenauflösung: rund 22 % davon (0,26 Kartenanteil × 0,85 Rahmenanteil). Wer dort schärfer werden will, muss den **Rahmen** vergrößern — die Karte höher aufzulösen bringt nichts. Genau das hat einen Anlauf gekostet.
 - Eine **1:1-Platzierung der Karte in der Story ist nicht möglich**: dafür müsste der Rahmen rund 3400 px breit sein und läge bei über 20 MP. Bei 2700×4800 wird die Karte auf 90 % skaliert — praktisch verlustfrei — und das Bild bleibt mit 13,0 MP unter der iOS-Grenze.
