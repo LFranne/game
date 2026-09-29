@@ -167,7 +167,9 @@ body {
 .postcard-face-clip {
   position: absolute;
   inset: 0;
-  border-radius: var(--radius);
+  /* 4 % der Breite, 5,66 % der Hoehe = kreisrunde Ecken im Kartenverhaeltnis
+     1,414. Passt zu CARD_RADIUS.card in postkarte.js (Export). */
+  border-radius: 4% / 5.66%;
   overflow: hidden;
   /* Kartenschatten: siehe Hinweis bei .postcard-flip-inner — als box-shadow
      pro Kartenseite, weil ein filter auf dem 3D-Container den Flip zerstört.
@@ -179,7 +181,7 @@ body {
   display: block;
   width: 100%;
   height: 100%;
-  border-radius: var(--radius);
+  border-radius: 4% / 5.66%;
 }
 
 /* Klebende Vorschau — nur einspaltig (unterhalb des 900px-Umbruchs). Im

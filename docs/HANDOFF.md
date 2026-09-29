@@ -22,7 +22,7 @@ Fertig und im Browser gegengeprüft:
 
 **Git:** Branch `master`, Commit `cfb6300`, **gepusht und live**. Der Remote `github.com/LFranne/game` ist **öffentlich**; die Veröffentlichung ist bewusst erfolgt. Frühere Fassungen dieses Dokuments stecken in `16321ad` und `efbfdf6`, falls Details zur Historie gebraucht werden.
 
-**Vorsicht beim Nachprüfen:** GitHub Pages liefert mit `Cache-Control: max-age=600`. Nach einem Push zeigt der Browser bis zu zehn Minuten die alte Fassung — mit Strg+F5 neu laden, sonst diagnostiziert man am falschen Stand. Eine Query an die HTML-Adresse hängen hilft **nicht**, weil `postkarte.js` ohne Query eingebunden ist und aus seinem eigenen Cache-Eintrag kommt.
+**Vorsicht beim Nachprüfen:** GitHub Pages liefert mit `Cache-Control: max-age=600`. Nach einem Push zeigt der Browser bis zu zehn Minuten die alte Fassung — mit Strg+F5 neu laden, sonst diagnostiziert man am falschen Stand (ist am 2026-09-29 passiert: alter Export wurde für den neuen gehalten). Seit v3 hängt an `postkarte.js` und `postkarte.css` in `index.html` eine Versionsnummer (`?v=3`): **bei jedem Push, der JS oder CSS ändert, die Nummer hochzählen**, dann holt der Browser die neuen Dateien sofort. Die HTML-Datei selbst bleibt bis zu zehn Minuten im Cache.
 
 ## 2. Getroffene Entscheidungen
 
@@ -104,6 +104,7 @@ Das hier sind die nicht offensichtlichen Stellen. Wer sie übersieht, baut funkt
 
 - Beide Exporte (`buildCombinedCanvas`, `buildStoryCanvas`) zeichnen die Karten selbst in Zielgröße aus dem State neu (`renderCardAt`) und fassen die Vorschau-Canvases nicht an. Dadurch landen die nummerierten Sticker-Platzhalter der Vorschau nie im geteilten Bild, und `currentExport()` braucht keine Render-Tricks mehr. `drawCardOnStory()` liefert runde Ecken und Schatten für beide.
 - **„Beide Seiten" war früher hart abgeschnitten** (fertige Canvases mit eckigen Ecken auf dunkler Fläche, die schöne Rundung fehlte). Nicht wieder auf `drawImage(canvasFront/Back)` zurückbauen.
+- **Eckenradien (2026-09-29):** zentral in `CARD_RADIUS` (Anteile der Kartenbreite): Karte 4 %, weißer Fotorahmen 1,6 %, Foto 1,1 %. Vorher feste 14/8 px, im 2880-px-Export fast eckig. Die Vorschau nutzt in `postkarte.css` `border-radius: 4% / 5.66%` (kreisrund im Verhältnis 1,414, nur gültig für Querformat) — bei Änderung beide Stellen anpassen.
 - **Umschlag-Export: gebaut und auf Wunsch wieder entfernt** (Franziska fand die Optik nicht schön). Nicht ungefragt neu bauen. Falls ein Umschlag später beim Link-Teilen (Phase 2) wiederkommt, neu gestalten statt diese Fassung zu übernehmen.
 - Teilen per **Link** bleibt Phase 2 (braucht Server). Entscheidung 2026-09-29: vorerst ohne Server, es bleibt beim Bild-Export.
 

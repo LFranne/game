@@ -84,6 +84,12 @@ const FORMATS = {
   landscape: { width: 2880, height: 2036 }
 };
 
+// Eckenradien als Anteil der Kartenbreite. Frueher waren Rahmen und Foto feste
+// 14/8 Pixel — bei 2880 px Breite wirkte das im Export fast eckig. Die aeussere
+// Karte (Story/"Beide Seiten") und die Vorschau (postkarte.css:
+// border-radius 4% / 5.66%, kreisrund im Kartenverhaeltnis 1,414) nutzen 4 %.
+const CARD_RADIUS = { card: 0.04, frame: 0.016, photo: 0.011 };
+
 const state = {
   photo: null,
   // Zuschnitt-Rechteck in Naturpixeln von state.photo. Bewusst ein Rechteck
@@ -492,7 +498,7 @@ function renderFrontTo(canvas, ctx) {
 
   // Foto-Passepartout
   ctx.fillStyle = COLORS.white;
-  drawRoundedRect(ctx, frame.x, frame.y, frame.w, frame.h, 14);
+  drawRoundedRect(ctx, frame.x, frame.y, frame.w, frame.h, w * CARD_RADIUS.frame);
   ctx.fill();
 
   const px = photo.x;
@@ -501,7 +507,7 @@ function renderFrontTo(canvas, ctx) {
   const ph = photo.h;
 
   ctx.save();
-  drawRoundedRect(ctx, px, py, pw, ph, 8);
+  drawRoundedRect(ctx, px, py, pw, ph, w * CARD_RADIUS.photo);
   ctx.clip();
 
   if (state.photo) {
@@ -1130,7 +1136,7 @@ const STORY = { width: 2700, height: 4800 };
 // Die Canvases selbst haben harte Ecken (der Radius lebt sonst nur im CSS) —
 // auf farbigem Grund fällt das sofort auf, deshalb hier explizit.
 function drawCardOnStory(ctx, source, x, y, w, h) {
-  const radius = w * 0.03;
+  const radius = w * CARD_RADIUS.card;
 
   ctx.save();
   ctx.shadowColor = 'rgba(15, 26, 17, 0.38)';
