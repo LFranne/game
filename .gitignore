@@ -4,3 +4,8 @@ docs/Ab_ins_Gruene_Brand_Guideline.pdf
 
 # Verteil-/Sicherungsarchiv, redundant zum Quellcode
 *.zip
+
+# Referenz- und Arbeitsbilder zum Entwerfen der Karte (Vorlagen, Freisteller,
+# generierte Entwuerfe). Nur Arbeitsmaterial, gehoert nicht ins oeffentliche
+# Repository und wird vom Generator nicht geladen.
+test/
