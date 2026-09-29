@@ -139,6 +139,7 @@ const shareStatus = document.getElementById('share-status');
 const fmtBoth = document.getElementById('fmt-both');
 const fmtStory = document.getElementById('fmt-story');
 const fmtGif = document.getElementById('fmt-gif');
+const fmtVideo = document.getElementById('fmt-video');
 
 const photoInput = document.getElementById('photo-input');
 const recipientInput = document.getElementById('recipient-input');
@@ -1318,12 +1319,13 @@ function buildCombinedCanvas() {
 
 // 'both' = Vorder- und Rückseite gestapelt (bisheriges Verhalten),
 // 'story' = 9:16 für Instagram Story und WhatsApp-Status,
-// 'gif' = animiert, die Karte dreht sich von vorn nach hinten.
+// 'gif' / 'video' = animiert, die Karte dreht sich von vorn nach hinten und
+// zurück (Endlosschleife).
 let shareFormat = 'both';
 
 function setShareFormat(key) {
   shareFormat = key;
-  [[fmtBoth, 'both'], [fmtStory, 'story'], [fmtGif, 'gif']].forEach(([btn, id]) => {
+  [[fmtBoth, 'both'], [fmtStory, 'story'], [fmtGif, 'gif'], [fmtVideo, 'video']].forEach(([btn, id]) => {
     btn.classList.toggle('is-active', key === id);
     btn.setAttribute('aria-pressed', String(key === id));
   });
@@ -1356,18 +1358,59 @@ function currentExport() {
   return exports[shareFormat]();
 }
 
-// ---------------- Animiertes GIF (Karte dreht sich) ----------------
-// gifenc (MIT, assets/gifenc.esm.js) wird erst beim ersten GIF-Export geladen.
-// Ablauf: Vorderseite halten -> Drehung (Karte wird horizontal zusammen- und
-// als Rueckseite wieder aufgeschoben, leicht groesser in der Mitte, damit es
-// nach Perspektive aussieht) -> Rueckseite halten, Endlosschleife. Jedes Bild
-// bekommt eine eigene 256-Farben-Palette; das haelt Foto und Text brauchbar.
-const GIF_CARD_W = 800;
+// ---------------- Animiertes GIF / Video (Karte dreht sich) ----------------
+// Beide Formate zeigen dieselbe Szene: Vorderseite halten -> Drehung nach hinten
+// -> Rueckseite halten -> Drehung zurueck. Weil am Ende wieder die Vorderseite
+// steht, laeuft die Endlosschleife nahtlos. Die Drehung ist gezeichnet: die
+// Karte wird horizontal zu- und als andere Seite wieder aufgeschoben, in der
+// Mitte leicht groesser, damit es nach Perspektive aussieht.
+const FLIP_CARD_W = 800;
+const FLIP_HOLD_FRONT_MS = 1800;
+const FLIP_HOLD_BACK_MS = 3000;
+const FLIP_MS = 700;
 const GIF_FLIP_FRAMES = 10;
-const GIF_HOLD_FRONT_MS = 1800;
-const GIF_HOLD_BACK_MS = 3000;
-const GIF_FLIP_FRAME_MS = 50;
 
+function easeInOut(t) {
+  return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+}
+
+// Bereitet die Szene einmal vor; draw(angle) zeichnet ihn ins Canvas
+// (0 = Vorderseite, PI = Rueckseite). Breite/Hoehe sind gerade, das verlangt
+// H.264 (MP4).
+function createFlipScene() {
+  const cardW = FLIP_CARD_W;
+  const cardH = Math.round(cardW * canvasFront.height / canvasFront.width);
+  const padX = Math.round(cardW * 0.06);
+  const padY = Math.round(cardH * 0.12);
+  const W = Math.round((cardW + padX * 2) / 2) * 2;
+  const H = Math.round((cardH + padY * 2) / 2) * 2;
+
+  const front = renderCardAt(renderFrontTo, cardW, cardH);
+  const back = renderCardAt(renderBackTo, cardW, cardH);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  setHighQuality(ctx);
+
+  function draw(angle) {
+    fillBrandGradient(ctx, W, H);
+    const w = Math.max(cardW * Math.abs(Math.cos(angle)), 2);
+    const h = cardH * (1 + 0.07 * Math.sin(angle));
+    drawCardOnStory(ctx, angle < Math.PI / 2 ? front : back,
+      (W - w) / 2, (H - h) / 2, w, h);
+  }
+  return { canvas, ctx, W, H, draw };
+}
+
+const nextTick = () => new Promise(resolve => setTimeout(resolve, 0));
+
+// ---- GIF ----
+// gifenc (MIT, assets/gifenc.esm.js) wird erst beim ersten GIF-Export geladen.
+// Jedes Bild bekommt eine eigene 256-Farben-Palette; das haelt Foto und Text
+// brauchbar. Die Rueckdrehung schreibt die bereits kodierten Drehbilder
+// rueckwaerts erneut, das spart Rechenzeit (nicht Dateigroesse).
 let gifencPromise = null;
 function loadGifenc() {
   if (!gifencPromise) {
@@ -1379,75 +1422,95 @@ function loadGifenc() {
   return gifencPromise;
 }
 
-const nextTick = () => new Promise(resolve => setTimeout(resolve, 0));
-
 async function buildFlipGif(onProgress) {
   const { GIFEncoder, quantize, applyPalette } = await loadGifenc();
-
-  const cardW = GIF_CARD_W;
-  const cardH = Math.round(cardW * canvasFront.height / canvasFront.width);
-  const padX = Math.round(cardW * 0.06);
-  const padY = Math.round(cardH * 0.12);
-  const W = cardW + padX * 2;
-  const H = cardH + padY * 2;
-
-  const front = renderCardAt(renderFrontTo, cardW, cardH);
-  const back = renderCardAt(renderBackTo, cardW, cardH);
-
-  const canvas = document.createElement('canvas');
-  canvas.width = W;
-  canvas.height = H;
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  setHighQuality(ctx);
-
+  const scene = createFlipScene();
   const gif = GIFEncoder();
+  const frameMs = Math.round(FLIP_MS / GIF_FLIP_FRAMES);
   const total = GIF_FLIP_FRAMES + 2;
-  let done = 0;
 
-  async function addFrame(source, scaleX, lift, delay) {
-    fillBrandGradient(ctx, W, H);
-    const w = Math.max(cardW * scaleX, 2);
-    const h = cardH * (1 + lift);
-    drawCardOnStory(ctx, source, padX + (cardW - w) / 2, padY + (cardH - h) / 2, w, h);
-    const { data } = ctx.getImageData(0, 0, W, H);
+  async function encode(angle, delay, index) {
+    scene.draw(angle);
+    const { data } = scene.ctx.getImageData(0, 0, scene.W, scene.H);
     const palette = quantize(data, 256);
-    gif.writeFrame(applyPalette(data, palette), W, H, { palette, delay });
-    done++;
-    onProgress(done / total);
+    const frame = { pixels: applyPalette(data, palette), palette, delay };
+    onProgress((index + 1) / total);
     await nextTick();
+    return frame;
   }
+  const write = f => gif.writeFrame(f.pixels, scene.W, scene.H, { palette: f.palette, delay: f.delay });
 
-  await addFrame(front, 1, 0, GIF_HOLD_FRONT_MS);
+  write(await encode(0, FLIP_HOLD_FRONT_MS, 0));
+  const flips = [];
   for (let i = 1; i <= GIF_FLIP_FRAMES; i++) {
-    const t = i / (GIF_FLIP_FRAMES + 1);
-    const angle = Math.PI * (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
-    const cos = Math.cos(angle);
-    await addFrame(angle < Math.PI / 2 ? front : back, Math.abs(cos), 0.07 * Math.sin(angle), GIF_FLIP_FRAME_MS);
+    const angle = Math.PI * easeInOut(i / (GIF_FLIP_FRAMES + 1));
+    const f = await encode(angle, frameMs, i);
+    flips.push(f);
+    write(f);
   }
-  await addFrame(back, 1, 0, GIF_HOLD_BACK_MS);
+  write(await encode(Math.PI, FLIP_HOLD_BACK_MS, total - 1));
+  for (let i = flips.length - 1; i >= 0; i--) write(flips[i]);
 
   gif.finish();
   return new Blob([gif.bytes()], { type: 'image/gif' });
 }
 
-async function shareGif() {
-  btnShare.disabled = true;
-  shareStatus.textContent = 'GIF wird erstellt …';
-  let blob;
-  try {
-    blob = await buildFlipGif(p => {
-      shareStatus.textContent = `GIF wird erstellt … ${Math.round(p * 100)} %`;
-    });
-  } catch (err) {
-    shareStatus.textContent = 'Das GIF konnte leider nicht erstellt werden.';
-    updateShareAvailability();
-    return;
-  }
-  updateShareAvailability();
-  shareStatus.textContent = '';
+// ---- Video ----
+// Nimmt das Canvas in Echtzeit per MediaRecorder auf. Format je nach Browser:
+// iOS Safari und aktuelles Chrome liefern MP4, aeltere Chromium/Firefox WebM.
+function pickVideoType() {
+  if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) return null;
+  const candidates = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+  return candidates.find(t => MediaRecorder.isTypeSupported(t)) || null;
+}
 
-  const filename = 'ab-ins-gruene-postkarte.gif';
-  const file = new File([blob], filename, { type: 'image/gif' });
+function buildFlipVideo(mimeType, onProgress) {
+  return new Promise((resolve, reject) => {
+    const scene = createFlipScene();
+    const total = FLIP_HOLD_FRONT_MS + FLIP_MS + FLIP_HOLD_BACK_MS + FLIP_MS;
+    const stream = scene.canvas.captureStream(30);
+    let recorder;
+    try {
+      recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 6000000 });
+    } catch (err) {
+      reject(err);
+      return;
+    }
+    const chunks = [];
+    recorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+    recorder.onerror = e => reject(e.error || new Error('recorder'));
+    recorder.onstop = () => resolve(new Blob(chunks, { type: mimeType.split(';')[0] }));
+
+    function angleAt(t) {
+      if (t < FLIP_HOLD_FRONT_MS) return 0;
+      t -= FLIP_HOLD_FRONT_MS;
+      if (t < FLIP_MS) return Math.PI * easeInOut(t / FLIP_MS);
+      t -= FLIP_MS;
+      if (t < FLIP_HOLD_BACK_MS) return Math.PI;
+      t -= FLIP_HOLD_BACK_MS;
+      return Math.PI * (1 - easeInOut(Math.min(t / FLIP_MS, 1)));
+    }
+
+    scene.draw(0);
+    recorder.start();
+    const start = performance.now();
+    function tick(now) {
+      const t = now - start;
+      scene.draw(angleAt(t));
+      onProgress(Math.min(t / total, 1));
+      if (t < total) {
+        requestAnimationFrame(tick);
+      } else {
+        // Letztes Bild noch kurz stehen lassen, damit es sicher im Video landet.
+        setTimeout(() => recorder.stop(), 120);
+      }
+    }
+    requestAnimationFrame(tick);
+  });
+}
+
+async function deliverBlob(blob, filename, savedText) {
+  const file = new File([blob], filename, { type: blob.type });
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try {
       await navigator.share({ files: [file], title: 'Meine Ab ins Grüne Postkarte', text: shareText() });
@@ -1457,7 +1520,42 @@ async function shareGif() {
     return;
   }
   saveBlob(blob, filename);
-  shareStatus.textContent = 'Animiertes GIF wurde gespeichert!';
+  shareStatus.textContent = savedText;
+}
+
+async function shareAnimated(kind) {
+  btnShare.disabled = true;
+  const label = kind === 'gif' ? 'GIF' : 'Video';
+  const report = p => {
+    shareStatus.textContent = kind === 'gif'
+      ? `GIF wird erstellt … ${Math.round(p * 100)} %`
+      : `Video wird aufgenommen … ${Math.round(p * 100)} % (Seite bitte offen lassen)`;
+  };
+  report(0);
+
+  let blob;
+  let filename = 'ab-ins-gruene-postkarte.gif';
+  try {
+    if (kind === 'gif') {
+      blob = await buildFlipGif(report);
+    } else {
+      const type = pickVideoType();
+      if (!type) {
+        shareStatus.textContent = 'Video wird von diesem Browser leider nicht unterstützt. Probier das GIF.';
+        updateShareAvailability();
+        return;
+      }
+      blob = await buildFlipVideo(type, report);
+      filename = 'ab-ins-gruene-postkarte.' + (type.startsWith('video/mp4') ? 'mp4' : 'webm');
+    }
+  } catch (err) {
+    shareStatus.textContent = `Das ${label} konnte leider nicht erstellt werden.`;
+    updateShareAvailability();
+    return;
+  }
+  updateShareAvailability();
+  shareStatus.textContent = '';
+  await deliverBlob(blob, filename, `${label} wurde gespeichert!`);
 }
 
 function saveBlob(blob, filename) {
@@ -1472,7 +1570,7 @@ function saveBlob(blob, filename) {
 }
 
 async function sharePostcard() {
-  if (shareFormat === 'gif') return shareGif();
+  if (shareFormat === 'gif' || shareFormat === 'video') return shareAnimated(shareFormat);
   const { canvas: source, filename, saved } = currentExport();
   source.toBlob(async blob => {
     if (!blob) return;
@@ -1503,6 +1601,7 @@ btnShare.addEventListener('click', sharePostcard);
 fmtBoth.addEventListener('click', () => setShareFormat('both'));
 fmtStory.addEventListener('click', () => setShareFormat('story'));
 fmtGif.addEventListener('click', () => setShareFormat('gif'));
+fmtVideo.addEventListener('click', () => setShareFormat('video'));
 
 // ---------------- Init ----------------
 applyFormat('landscape');

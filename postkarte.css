@@ -275,6 +275,7 @@ body {
 /* ---------------- Teilen ---------------- */
 .share-format {
   display: flex;
+  flex-wrap: wrap; /* vier Optionen: mobil zwei Zeilen */
   gap: 0.35rem;
   width: 100%;
   margin-top: 0;
@@ -284,7 +285,7 @@ body {
 }
 
 .share-format-option {
-  flex: 1;
+  flex: 1 1 40%;
   min-height: 40px;
   border: none;
   border-radius: calc(var(--radius) - 3px);
