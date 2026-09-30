@@ -255,6 +255,12 @@ body {
   color: var(--c-wald);
 }
 
+/* "Karte umdrehen" im selben Waldgruen wie "Foto hochladen" (.upload-button). */
+.preview-actions .btn-secondary {
+  background: var(--c-wald);
+  color: var(--c-white);
+}
+
 /* Symbole sind Vektorgrafiken (currentColor), keine Zeichen aus einer
    Systemschrift: die Guideline erlaubt nur Asap Condensed und Zilla Slab. */
 .btn-icon {
