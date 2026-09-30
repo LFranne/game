@@ -414,55 +414,100 @@ function containInSquare(img, x, y, size) {
   return { x: x + (size - w) / 2, y: y + (size - h) / 2, w, h };
 }
 
-// Zeichnet die vier Sticker-Plaetze in den uebergebenen Platz (x/y/w/h =
-// maximal verfuegbar, nicht Zielmass): ein 2x2-Raster fester Zellen, horizontal
-// zentriert. Belegte Zellen zeigen ihren Sticker (contain, nie verzerrt).
-// showSlots zeichnet zusaetzlich die freien Zellen gestrichelt mit ihrer
-// Nummer — das ist nur Bedienhilfe der Vorschau und darf nie im Export landen
-// (dort ist der Parameter aus). Ohne Sticker und ohne showSlots bleibt der
-// Bereich komplett leer.
-function drawBackStickers(ctx, x, y, w, h, showSlots) {
-  if (w <= 0 || h <= 0) return;
-  if (!showSlots && !state.stickers.length) return;
+// Platz und Groesse der Sticker je nach Anzahl (1-4), alles in dem uebergebenen
+// Bereich zentriert: 1 = eine grosse Zelle, 2 = nebeneinander oder untereinander
+// (was mehr Platz nutzt), 3 = eine Reihe oder 2x2 mit zentrierter dritter Zelle (was groesser wird), 4 = 2x2. Die
+// Zellgroesse ist pro Anzahl gedeckelt (Anteil der Kartenbreite), damit ein
+// einzelner Sticker die Rueckseite nicht erschlaegt.
+function getStickerLayout(n, x, y, w, h, cardW) {
+  if (n < 1) return [];
   const gap = Math.min(w, h) * 0.04;
-  // Deckel bei 15 % der Kartenbreite: bei querformatigen Briefmarken wird der
-  // Platz hoeher, und die Sticker sollen nicht mit der Marke die Groesse
-  // wechseln.
-  const cell = Math.max(Math.min((w - gap) / 2, (h - gap) / 2, ctx.canvas.width * 0.15), 0);
-  const gridW = cell * 2 + gap;
-  const startX = x + (w - gridW) / 2;
-
-  for (let i = 0; i < MAX_STICKERS; i++) {
-    const cx = startX + (i % 2) * (cell + gap);
-    const cy = y + Math.floor(i / 2) * (cell + gap);
-    const img = stickerImages[state.stickers[i]];
-
-    if (img) {
-      const box = containInSquare(img, cx, cy, cell);
-      // Dezenter Schatten, damit der Sticker wie aufgeklebt wirkt.
-      ctx.save();
-      ctx.shadowColor = 'rgba(15, 26, 17, 0.28)';
-      ctx.shadowBlur = cell * 0.03;
-      ctx.shadowOffsetY = cell * 0.012;
-      ctx.drawImage(img, box.x, box.y, box.w, box.h);
-      ctx.restore();
-    } else if (showSlots && !state.stickers[i]) {
-      ctx.save();
-      ctx.strokeStyle = COLORS.wald3;
-      ctx.fillStyle = COLORS.wald3;
-      ctx.globalAlpha = 0.7;
-      ctx.lineWidth = Math.max(2, cell * 0.012);
-      ctx.setLineDash([cell * 0.05, cell * 0.04]);
-      drawRoundedRect(ctx, cx, cy, cell, cell, cell * 0.08);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.font = `600 ${cell * 0.36}px ${getFontStack('heading')}`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(String(i + 1), cx + cell / 2, cy + cell / 2);
-      ctx.restore();
+  let cols;
+  let rows;
+  let cell;
+  if (n === 1) {
+    cols = 1; rows = 1;
+    cell = Math.min(w, h, cardW * 0.26);
+  } else if (n === 2) {
+    const side = Math.min((w - gap) / 2, h);
+    const stack = Math.min(w, (h - gap) / 2);
+    cell = Math.min(Math.max(side, stack), cardW * 0.21);
+    const sideBySide = side >= stack;
+    cols = sideBySide ? 2 : 1;
+    rows = sideBySide ? 1 : 2;
+  } else {
+    const grid = Math.min((w - gap) / 2, (h - gap) / 2);
+    const row = n === 3 ? Math.min((w - gap * 2) / 3, h) : 0;
+    if (row > grid) {
+      // Drei in einer Reihe nutzt die flache Flaeche besser als 2x2.
+      cols = 3; rows = 1;
+      cell = Math.min(row, cardW * 0.17);
+    } else {
+      cols = 2; rows = 2;
+      cell = Math.min(grid, cardW * 0.15);
     }
   }
+  cell = Math.max(cell, 0);
+
+  const gridW = cell * cols + gap * (cols - 1);
+  const gridH = cell * rows + gap * (rows - 1);
+  const startX = x + (w - gridW) / 2;
+  const startY = y + Math.max((h - gridH) / 2, 0);
+
+  const cells = [];
+  for (let i = 0; i < n; i++) {
+    const row = Math.floor(i / cols);
+    const col = i % cols;
+    // Einzelne Zelle in der letzten Zeile (n = 3) mittig setzen.
+    const inRow = Math.min(cols, n - row * cols);
+    const rowOffset = (cols - inRow) * (cell + gap) / 2;
+    cells.push({ x: startX + rowOffset + col * (cell + gap), y: startY + row * (cell + gap), size: cell });
+  }
+  return cells;
+}
+
+// Zeichnet die gewaehlten Sticker in den uebergebenen Platz (x/y/w/h = maximal
+// verfuegbar, nicht Zielmass), Bilder per contain, nie verzerrt.
+// showSlots (nur Vorschau, nie Export): solange noch kein Sticker gewaehlt ist,
+// zeigt eine gestrichelte Zelle, wo der erste landet. Ohne Sticker und ohne
+// showSlots bleibt der Bereich komplett leer.
+function drawBackStickers(ctx, x, y, w, h, showSlots) {
+  if (w <= 0 || h <= 0) return;
+  const placed = state.stickers.filter(id => stickerImages[id]);
+  if (!placed.length && !showSlots) return;
+
+  if (!placed.length) {
+    const [slot] = getStickerLayout(1, x, y, w, h, ctx.canvas.width);
+    ctx.save();
+    ctx.strokeStyle = COLORS.wald3;
+    ctx.fillStyle = COLORS.wald3;
+    ctx.globalAlpha = 0.7;
+    ctx.lineWidth = Math.max(2, slot.size * 0.012);
+    ctx.setLineDash([slot.size * 0.05, slot.size * 0.04]);
+    drawRoundedRect(ctx, slot.x, slot.y, slot.size, slot.size, slot.size * 0.08);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.font = `600 ${slot.size * 0.36}px ${getFontStack('heading')}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('1', slot.x + slot.size / 2, slot.y + slot.size / 2);
+    ctx.restore();
+    return;
+  }
+
+  const cells = getStickerLayout(placed.length, x, y, w, h, ctx.canvas.width);
+  placed.forEach((id, i) => {
+    const { x: cx, y: cy, size } = cells[i];
+    const img = stickerImages[id];
+    const box = containInSquare(img, cx, cy, size);
+    // Dezenter Schatten, damit der Sticker wie aufgeklebt wirkt.
+    ctx.save();
+    ctx.shadowColor = 'rgba(15, 26, 17, 0.28)';
+    ctx.shadowBlur = size * 0.03;
+    ctx.shadowOffsetY = size * 0.012;
+    ctx.drawImage(img, box.x, box.y, box.w, box.h);
+    ctx.restore();
+  });
 }
 
 // Eine Adresszeile: Beschriftung ("An:" / "Von:") links in Zilla Slab,
@@ -926,6 +971,73 @@ function toggleSticker(type) {
 
 stickerChoices.forEach(btn => {
   btn.addEventListener('click', () => toggleSticker(btn.dataset.sticker));
+});
+
+// ---------------- Grossansicht fuer Briefmarken und Sticker ----------------
+// Kleine Lupe in der Ecke jeder Kachel. Sie liegt als <span> IN der Kachel (ein
+// Button im Button waere ungueltig) und faengt den Klick vor der Kachel ab,
+// damit die Auswahl unveraendert per Tipp auf die Kachel funktioniert.
+const previewDialog = document.getElementById('preview-dialog');
+const previewImg = document.getElementById('preview-img');
+const previewTitle = document.getElementById('preview-title');
+const previewAction = document.getElementById('preview-action');
+const previewClose = document.getElementById('preview-close');
+let previewTarget = null;
+
+const ZOOM_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5.5 5.5"/></svg>';
+
+function updatePreviewAction() {
+  if (!previewTarget) return;
+  const { kind, id } = previewTarget;
+  if (kind === 'stamp') {
+    const aktiv = state.stamp === id;
+    previewAction.textContent = aktiv ? 'Ausgewählt' : 'Auswählen';
+    previewAction.disabled = aktiv;
+    return;
+  }
+  const gewaehlt = state.stickers.includes(id);
+  const voll = state.stickers.length >= MAX_STICKERS;
+  previewAction.textContent = gewaehlt ? 'Entfernen' : voll ? `Alle ${MAX_STICKERS} Plätze belegt` : 'Auswählen';
+  previewAction.disabled = !gewaehlt && voll;
+}
+
+function openPreview(kind, id) {
+  const list = kind === 'stamp' ? STAMPS : STICKERS;
+  const item = list.find(entry => entry.id === id);
+  if (!item) return;
+  previewTarget = { kind, id };
+  previewImg.src = item.src;
+  previewImg.alt = item.label;
+  previewTitle.textContent = item.label;
+  updatePreviewAction();
+  previewDialog.showModal();
+}
+
+previewAction.addEventListener('click', () => {
+  if (!previewTarget) return;
+  const { kind, id } = previewTarget;
+  if (kind === 'stamp') selectStamp(id);
+  else toggleSticker(id);
+  previewDialog.close();
+});
+previewClose.addEventListener('click', () => previewDialog.close());
+// Klick auf den abgedunkelten Hintergrund schliesst ebenfalls.
+previewDialog.addEventListener('click', e => {
+  if (e.target === previewDialog) previewDialog.close();
+});
+
+[[stampChoices, 'stamp', 'stamp'], [stickerChoices, 'sticker', 'sticker']].forEach(([buttons, kind, key]) => {
+  buttons.forEach(btn => {
+    const hint = document.createElement('span');
+    hint.className = 'zoom-hint';
+    hint.setAttribute('aria-hidden', 'true');
+    hint.innerHTML = ZOOM_ICON;
+    hint.addEventListener('click', e => {
+      e.stopPropagation();
+      openPreview(kind, btn.dataset[key]);
+    });
+    btn.appendChild(hint);
+  });
 });
 
 // ---------------- Zuschneide-Dialog ----------------
