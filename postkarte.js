@@ -469,7 +469,8 @@ function getStickerLayout(n, x, y, w, h, cardW) {
 // Zeichnet die gewaehlten Sticker in den uebergebenen Platz (x/y/w/h = maximal
 // verfuegbar, nicht Zielmass), Bilder per contain, nie verzerrt.
 // showSlots (nur Vorschau, nie Export): solange noch kein Sticker gewaehlt ist,
-// zeigt eine gestrichelte Zelle, wo der erste landet. Ohne Sticker und ohne
+// zeigen vier gestrichelte, nummerierte Zellen die moeglichen Plaetze; mit dem
+// ersten Sticker passt sich das Layout der Anzahl an. Ohne Sticker und ohne
 // showSlots bleibt der Bereich komplett leer.
 function drawBackStickers(ctx, x, y, w, h, showSlots) {
   if (w <= 0 || h <= 0) return;
@@ -477,21 +478,23 @@ function drawBackStickers(ctx, x, y, w, h, showSlots) {
   if (!placed.length && !showSlots) return;
 
   if (!placed.length) {
-    const [slot] = getStickerLayout(1, x, y, w, h, ctx.canvas.width);
-    ctx.save();
-    ctx.strokeStyle = COLORS.wald3;
-    ctx.fillStyle = COLORS.wald3;
-    ctx.globalAlpha = 0.7;
-    ctx.lineWidth = Math.max(2, slot.size * 0.012);
-    ctx.setLineDash([slot.size * 0.05, slot.size * 0.04]);
-    drawRoundedRect(ctx, slot.x, slot.y, slot.size, slot.size, slot.size * 0.08);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.font = `600 ${slot.size * 0.36}px ${getFontStack('heading')}`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('1', slot.x + slot.size / 2, slot.y + slot.size / 2);
-    ctx.restore();
+    // Leere Vorschau: alle vier moeglichen Plaetze nummeriert zeigen.
+    getStickerLayout(MAX_STICKERS, x, y, w, h, ctx.canvas.width).forEach((slot, i) => {
+      ctx.save();
+      ctx.strokeStyle = COLORS.wald3;
+      ctx.fillStyle = COLORS.wald3;
+      ctx.globalAlpha = 0.7;
+      ctx.lineWidth = Math.max(2, slot.size * 0.012);
+      ctx.setLineDash([slot.size * 0.05, slot.size * 0.04]);
+      drawRoundedRect(ctx, slot.x, slot.y, slot.size, slot.size, slot.size * 0.08);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.font = `600 ${slot.size * 0.36}px ${getFontStack('heading')}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(i + 1), slot.x + slot.size / 2, slot.y + slot.size / 2);
+      ctx.restore();
+    });
     return;
   }
 
