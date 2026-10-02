@@ -119,6 +119,10 @@ function setPhoto(img, crop) {
   state.crop = crop;
 }
 
+// Standardbild fuer die Vorderseite, solange noch kein eigenes Foto gewaehlt ist
+// (null = nicht geladen -> alter leerer Platzhalter).
+const DEFAULT_PHOTO_SRC = 'assets/AIG_default_photo.webp';
+let defaultPhoto = null;
 const logos = { full: null, signet: null, fullDust: null, stacked: null };
 // id -> Image, oder null wenn die Datei fehlt/nicht geladen werden konnte.
 const stampImages = {};
@@ -545,11 +549,11 @@ function drawAddressLine(ctx, label, name, x, lineY, maxWidth, fontSize) {
 
 // Kamera-Symbol fuer den leeren Fotoplatz, gezeichnet statt als Emoji (ein
 // Emoji kaeme aus einer Systemschrift, erlaubt sind nur die Guideline-Schriften).
-function drawCameraIcon(ctx, cx, cy, size) {
+function drawCameraIcon(ctx, cx, cy, size, color = COLORS.wald) {
   ctx.save();
   ctx.translate(cx - size / 2, cy - size / 2);
   ctx.scale(size / 24, size / 24);
-  ctx.strokeStyle = COLORS.wald;
+  ctx.strokeStyle = color;
   ctx.lineWidth = 1.8;
   ctx.lineJoin = 'round';
   ctx.stroke(new Path2D('M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z'));
@@ -560,7 +564,38 @@ function drawCameraIcon(ctx, cx, cy, size) {
 }
 
 // ---------------- Rendering ----------------
-function renderFrontTo(canvas, ctx) {
+// Hinweis auf dem Standardbild: zeigt, dass hier ein eigenes Foto hinein kann.
+// Nur die Vorschau zeichnet ihn (showHint), nie die Exporte.
+function drawDefaultPhotoHint(ctx, px, py, pw, ph) {
+  const label = 'Eigenes Foto hochladen';
+  const fontSize = pw * 0.038;
+  const icon = fontSize * 1.5;
+  ctx.save();
+  ctx.font = `600 ${fontSize}px ${getFontStack('body')}`;
+  const textW = ctx.measureText(label).width;
+  const padX = fontSize * 0.9;
+  const gap = fontSize * 0.55;
+  const boxW = padX * 2 + icon + gap + textW;
+  const boxH = fontSize * 2.5;
+  const bx = px + (pw - boxW) / 2;
+  const by = py + ph - boxH - ph * 0.06;
+
+  ctx.shadowColor = 'rgba(15, 26, 17, 0.35)';
+  ctx.shadowBlur = fontSize * 0.8;
+  drawRoundedRect(ctx, bx, by, boxW, boxH, boxH / 2);
+  ctx.fillStyle = 'rgba(37, 60, 40, 0.88)';
+  ctx.fill();
+  ctx.shadowColor = 'transparent';
+
+  drawCameraIcon(ctx, bx + padX + icon / 2, by + boxH / 2, icon, COLORS.white);
+  ctx.fillStyle = COLORS.white;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, bx + padX + icon + gap, by + boxH / 2 + fontSize * 0.04);
+  ctx.restore();
+}
+
+function renderFrontTo(canvas, ctx, showHint) {
   setHighQuality(ctx);
   const w = canvas.width;
   const h = canvas.height;
@@ -590,6 +625,10 @@ function renderFrontTo(canvas, ctx) {
     const { sx, sy, sw, sh } =
       state.crop || coverFit(state.photo.naturalWidth, state.photo.naturalHeight, pw, ph);
     drawPhotoRect(ctx, state.photo, { sx, sy, sw, sh }, px, py, pw, ph);
+  } else if (defaultPhoto) {
+    const c = coverFit(defaultPhoto.naturalWidth, defaultPhoto.naturalHeight, pw, ph);
+    drawPhotoRect(ctx, defaultPhoto, c, px, py, pw, ph);
+    if (showHint) drawDefaultPhotoHint(ctx, px, py, pw, ph);
   } else {
     ctx.fillStyle = COLORS.dust;
     ctx.fillRect(px, py, pw, ph);
@@ -642,7 +681,7 @@ function renderFrontTo(canvas, ctx) {
 
 function renderFront() {
   invalidatePendingShare();
-  renderFrontTo(canvasFront, ctxFront);
+  renderFrontTo(canvasFront, ctxFront, true);
 }
 
 function renderBackTo(canvas, ctx, showSlots) {
@@ -928,8 +967,15 @@ flipWrapper.addEventListener('click', e => {
   toggleFlip();
 });
 
+// Teilen geht auch mit dem Standardbild; dann ein Hinweis, damit niemand
+// versehentlich das Standardbild verschickt.
 function updateShareAvailability() {
-  btnShare.disabled = !state.photo;
+  btnShare.disabled = !state.photo && !defaultPhoto;
+  if (!state.photo && defaultPhoto) {
+    shareStatus.textContent = 'Du nutzt gerade das Standardbild. Tippe auf die Karte, um dein eigenes Foto zu wählen.';
+  } else if (state.photo && /Standardbild/.test(shareStatus.textContent)) {
+    shareStatus.textContent = '';
+  }
 }
 
 // ---------------- Sticker ----------------
@@ -1449,6 +1495,7 @@ function setShareFormat(key) {
     btn.setAttribute('aria-pressed', String(key === id));
   });
   shareStatus.textContent = '';
+  updateShareAvailability();
 }
 
 function shareText() {
@@ -1767,6 +1814,15 @@ Promise.all([
 stampChoices.forEach(btn => {
   btn.addEventListener('click', () => selectStamp(btn.dataset.stamp));
 });
+
+// Standardbild laden; fehlt die Datei, bleibt der leere Platzhalter.
+loadImage(DEFAULT_PHOTO_SRC)
+  .then(img => {
+    defaultPhoto = img;
+    renderFront();
+    updateShareAvailability();
+  })
+  .catch(() => {});
 
 // Briefmarken-Motive einzeln laden: fehlt eine Datei, sollen die uebrigen
 // trotzdem waehlbar bleiben — deshalb bewusst kein Promise.all, das beim
