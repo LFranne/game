@@ -627,6 +627,9 @@ function renderFrontTo(canvas, ctx, showHint) {
     drawPhotoRect(ctx, state.photo, { sx, sy, sw, sh }, px, py, pw, ph);
   } else if (defaultPhoto) {
     const c = coverFit(defaultPhoto.naturalWidth, defaultPhoto.naturalHeight, pw, ph);
+    // Oberkante buendig: das Dach soll komplett zu sehen sein, abgeschnitten
+    // wird stattdessen unten von der Wiese.
+    c.sy = 0;
     drawPhotoRect(ctx, defaultPhoto, c, px, py, pw, ph);
     if (showHint) drawDefaultPhotoHint(ctx, px, py, pw, ph);
   } else {
