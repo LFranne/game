@@ -674,12 +674,12 @@ body {
 .page-header {
   position: relative;
   /* Platz oben fuer den Sprachknopf, damit er das Logo nicht ueberdeckt. */
-  padding-top: 2.4rem;
+  padding-top: 2.1rem;
 }
 
 .lang-menu {
   position: absolute;
-  top: 0.45rem;
+  top: 0.5rem;
   right: 0.7rem;
   z-index: 30;
 }
@@ -687,14 +687,15 @@ body {
 .lang-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 0.28rem;
-  min-height: 26px;
-  padding: 0 0.5rem;
+  position: relative;
+  gap: 0.2rem;
+  min-height: 14px;
+  padding: 0 0.3rem;
   border: 1px solid rgba(242, 239, 237, 0.35);
   border-radius: 999px;
   background: rgba(242, 239, 237, 0.12);
   color: var(--c-dust);
-  font: 700 0.72rem var(--font-body);
+  font: 700 0.6rem var(--font-body);
   letter-spacing: 0.04em;
   cursor: pointer;
 }
@@ -714,13 +715,31 @@ body {
 }
 
 .lang-toggle .lang-flag {
-  width: 17px;
-  height: 11px;
+  width: 13px;
+  height: 9px;
 }
 
 .lang-toggle .lang-chevron {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
+}
+
+/* Nur Flagge + Pfeil sichtbar; das Kuerzel bleibt fuer Screenreader. */
+.lang-toggle-code {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Unsichtbar vergroesserte Tippflaeche (~44 px), damit der kleine Knopf
+   mit dem Daumen trotzdem trifft. */
+.lang-toggle::after {
+  content: '';
+  position: absolute;
+  inset: -14px -12px;
 }
 
 .lang-chevron {
