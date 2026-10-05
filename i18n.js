@@ -389,9 +389,39 @@ function applyStaticTranslations() {
   document.querySelectorAll('.lang-option').forEach(btn => {
     const active = btn.dataset.lang === currentLang;
     btn.classList.toggle('is-active', active);
-    btn.setAttribute('aria-pressed', String(active));
+    btn.setAttribute('aria-checked', String(active));
+    if (active) {
+      // Knopf zeigt die aktuelle Flagge und das Kuerzel.
+      const flag = btn.querySelector('.lang-flag');
+      const slot = document.getElementById('lang-toggle-flag');
+      if (flag && slot) slot.innerHTML = flag.outerHTML;
+      const code = document.getElementById('lang-toggle-code');
+      if (code) code.textContent = currentLang.toUpperCase();
+    }
   });
 }
+
+// Auf-/Zuklappen der Sprachliste.
+function setLangListOpen(open) {
+  const list = document.getElementById('lang-list');
+  const toggle = document.getElementById('lang-toggle');
+  if (!list || !toggle) return;
+  list.hidden = !open;
+  toggle.setAttribute('aria-expanded', String(open));
+}
+
+document.addEventListener('click', e => {
+  const toggle = document.getElementById('lang-toggle');
+  if (!toggle) return;
+  if (toggle.contains(e.target)) {
+    setLangListOpen(toggle.getAttribute('aria-expanded') !== 'true');
+  } else if (!e.target.closest('#lang-list')) {
+    setLangListOpen(false);
+  }
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') setLangListOpen(false);
+});
 
 // Wechselt die Sprache; postkarte.js hoert auf 'langchange' und zeichnet neu.
 function setLang(lang, remember) {
@@ -401,6 +431,7 @@ function setLang(lang, remember) {
     try { localStorage.setItem('lang', lang); } catch (e) { /* egal */ }
   }
   applyStaticTranslations();
+  setLangListOpen(false);
   window.dispatchEvent(new Event('langchange'));
 }
 
