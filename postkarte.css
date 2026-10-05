@@ -668,3 +668,63 @@ body {
   opacity: 0.55;
   cursor: default;
 }
+
+/* ---------------- Sprachauswahl ---------------- */
+/* Wie auf der Waschtrockner-Anleitung: Flagge + Kuerzel, aktive Sprache
+   dunkelgruen mit Fichte-Streifen. Hier nicht klebend, weil die Kartenvorschau
+   mobil bereits am oberen Rand klebt. */
+.langs {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  max-width: 420px;
+  margin: 0 auto 1.25rem;
+  padding: 0 1rem;
+}
+
+.lang-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 0 0;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 8px 4px;
+  border: 1px solid var(--c-wald2);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--c-wald);
+  font: 700 1rem var(--font-body);
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: 0.18s ease;
+}
+
+.lang-btn:hover {
+  background: var(--c-white);
+}
+
+.lang-btn.is-active {
+  border-color: var(--c-wald);
+  background: var(--c-wald);
+  color: var(--c-white);
+  box-shadow: inset 0 -3px 0 var(--c-fichte);
+}
+
+.lang-btn:focus-visible {
+  outline: 2px solid var(--c-fichte);
+  outline-offset: 2px;
+}
+
+.lang-flag {
+  display: block;
+  width: 22px;
+  height: 15px;
+  flex: none;
+  border-radius: 2px;
+  overflow: hidden;
+  box-shadow: 0 0 0 1px rgba(32, 40, 41, 0.16);
+}

@@ -567,7 +567,7 @@ function drawCameraIcon(ctx, cx, cy, size, color = COLORS.wald) {
 // Hinweis auf dem Standardbild: zeigt, dass hier ein eigenes Foto hinein kann.
 // Nur die Vorschau zeichnet ihn (showHint), nie die Exporte.
 function drawDefaultPhotoHint(ctx, px, py, pw, ph) {
-  const label = 'Eigenes Foto hochladen';
+  const label = t('hintUpload');
   const fontSize = pw * 0.038;
   const icon = fontSize * 1.5;
   ctx.save();
@@ -647,7 +647,7 @@ function renderFrontTo(canvas, ctx, showHint) {
     ctx.textBaseline = 'middle';
     drawCameraIcon(ctx, px + pw / 2, py + ph / 2 - pw * 0.06, pw * 0.09);
     ctx.font = `500 ${pw * 0.05}px ${getFontStack('body')}`;
-    ctx.fillText('Foto hochladen', px + pw / 2, py + ph / 2 + pw * 0.08);
+    ctx.fillText(t('cardUpload'), px + pw / 2, py + ph / 2 + pw * 0.08);
   }
   ctx.restore();
 
@@ -679,7 +679,7 @@ function renderFrontTo(canvas, ctx, showHint) {
   ctx.textBaseline = 'middle';
   ctx.font = `600 ${taglineFontSize}px ${getFontStack('heading')}`;
   const taglineY = logoY + logoHeight + bandGap + taglineFontSize * 0.5;
-  ctx.fillText('Grüße aus dem Schwarzwald', w / 2, taglineY);
+  ctx.fillText(t('cardTagline'), w / 2, taglineY);
 }
 
 function renderFront() {
@@ -727,7 +727,7 @@ function renderBackTo(canvas, ctx, showSlots) {
   ctx.fillStyle = COLORS.graphite;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
-  const message = state.message || 'Deine persönliche Nachricht erscheint hier ...';
+  const message = state.message || t('cardMessagePh');
 
   // Schrift bis auf 70 % verkleinern, falls die (maximal 200 Zeichen lange)
   // Nachricht sonst in das Logo liefe. Im Normalfall bleibt es bei voller Groesse.
@@ -807,8 +807,8 @@ function renderBackTo(canvas, ctx, showSlots) {
 
   ctx.fillStyle = COLORS.graphite;
   const addrFontSize = w * 0.034;
-  drawAddressLine(ctx, 'An:', state.recipientName, addrX, addrTop, addrWidth, addrFontSize);
-  drawAddressLine(ctx, 'Von:', state.senderName, addrX, addrTop + addrLineGap, addrWidth, addrFontSize);
+  drawAddressLine(ctx, t('cardTo'), state.recipientName, addrX, addrTop, addrWidth, addrFontSize);
+  drawAddressLine(ctx, t('cardFrom'), state.senderName, addrX, addrTop + addrLineGap, addrWidth, addrFontSize);
 
   // Sticker unter den Adresszeilen bis zum unteren Kartenrand.
   const stickerTop = addrTop + addrLineGap + h * 0.04;
@@ -975,8 +975,8 @@ flipWrapper.addEventListener('click', e => {
 function updateShareAvailability() {
   btnShare.disabled = !state.photo && !defaultPhoto;
   if (!state.photo && defaultPhoto) {
-    shareStatus.textContent = 'Du nutzt gerade das Standardbild. Tippe auf die Karte, um dein eigenes Foto zu wählen.';
-  } else if (state.photo && /Standardbild/.test(shareStatus.textContent)) {
+    shareStatus.textContent = t('defaultNotice');
+  } else if (state.photo && shareStatus.textContent === t('defaultNotice')) {
     shareStatus.textContent = '';
   }
 }
@@ -1043,14 +1043,22 @@ function updatePreviewAction() {
   const { kind, id } = previewTarget;
   if (kind === 'stamp') {
     const aktiv = state.stamp === id;
-    previewAction.textContent = aktiv ? 'Ausgewählt' : 'Auswählen';
+    previewAction.textContent = aktiv ? t('selected') : t('select');
     previewAction.disabled = aktiv;
     return;
   }
   const gewaehlt = state.stickers.includes(id);
   const voll = state.stickers.length >= MAX_STICKERS;
-  previewAction.textContent = gewaehlt ? 'Entfernen' : voll ? `Alle ${MAX_STICKERS} Plätze belegt` : 'Auswählen';
+  previewAction.textContent = gewaehlt ? t('remove') : voll ? t('slotsFull', { n: MAX_STICKERS }) : t('select');
   previewAction.disabled = !gewaehlt && voll;
+}
+
+// Eigennamen (Sticker, Orte) bleiben unuebersetzt; nur zwei Briefmarken
+// beschreiben ein Motiv und bekommen je Sprache einen Namen.
+function itemLabel(kind, item) {
+  if (kind === 'stamp' && item.id === 'hasen') return t('stampHasen');
+  if (kind === 'stamp' && item.id === 'wasserrad') return t('stampWasserrad');
+  return item.label;
 }
 
 function openPreview(kind, id) {
@@ -1059,8 +1067,9 @@ function openPreview(kind, id) {
   if (!item) return;
   previewTarget = { kind, id };
   previewImg.src = item.src;
-  previewImg.alt = item.label;
-  previewTitle.textContent = item.label;
+  const name = itemLabel(kind, item);
+  previewImg.alt = name;
+  previewTitle.textContent = name;
   updatePreviewAction();
   previewDialog.showModal();
 }
@@ -1503,8 +1512,8 @@ function setShareFormat(key) {
 
 function shareText() {
   return state.senderName
-    ? `Eine Urlaubspostkarte von ${state.senderName} aus dem Schwarzwald.`
-    : 'Schau dir meine Postkarte aus dem Schwarzwald an!';
+    ? t('shareTextFrom', { name: state.senderName })
+    : t('shareText');
 }
 
 // Alle Exporte zeichnen die Karten selbst in Zielgroesse aus dem State neu und
@@ -1516,12 +1525,12 @@ function currentExport() {
     both: () => ({
       canvas: buildCombinedCanvas(),
       filename: 'ab-ins-gruene-postkarte.png',
-      saved: 'Postkarte wurde gespeichert!'
+      savedKey: 'savedBoth'
     }),
     story: () => ({
       canvas: buildStoryCanvas(),
       filename: 'ab-ins-gruene-postkarte-story.png',
-      saved: 'Story-Bild wurde gespeichert!'
+      savedKey: 'savedStory'
     })
   };
   return exports[shareFormat]();
@@ -1688,37 +1697,34 @@ let pendingShare = null;
 function invalidatePendingShare() {
   if (!pendingShare) return;
   pendingShare = null;
-  shareLabel.textContent = 'Teilen';
+  shareLabel.textContent = t('share');
 }
 
 async function deliverPending() {
-  const { blob, filename, savedText } = pendingShare;
+  const { blob, filename, savedKey } = pendingShare;
   const file = new File([blob], filename, { type: blob.type });
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try {
-      await navigator.share({ files: [file], title: 'Meine Ab ins Grüne Postkarte', text: shareText() });
+      await navigator.share({ files: [file], title: t('shareTitle'), text: shareText() });
       shareStatus.textContent = '';
     } catch (err) {
       if (err.name === 'AbortError') return;
       // Datei bleibt erhalten: zweite Chance ist das Speichern.
       saveBlob(blob, filename);
-      shareStatus.textContent = 'Teilen ging nicht, die Datei wurde stattdessen gespeichert.';
+      shareStatus.textContent = t('shareFailedSaved');
     }
     return;
   }
   saveBlob(blob, filename);
-  shareStatus.textContent = savedText;
+  shareStatus.textContent = t(savedKey);
 }
 
 async function shareAnimated(kind) {
   if (pendingShare && pendingShare.kind === kind) return deliverPending();
 
   btnShare.disabled = true;
-  const label = kind === 'gif' ? 'GIF' : 'Video';
   const report = p => {
-    shareStatus.textContent = kind === 'gif'
-      ? `GIF wird erstellt … ${Math.round(p * 100)} %`
-      : `Video wird aufgenommen … ${Math.round(p * 100)} % (Seite bitte offen lassen)`;
+    shareStatus.textContent = t(kind === 'gif' ? 'gifProgress' : 'videoProgress', { p: Math.round(p * 100) });
   };
   report(0);
 
@@ -1730,7 +1736,7 @@ async function shareAnimated(kind) {
     } else {
       const type = pickVideoType();
       if (!type) {
-        shareStatus.textContent = 'Video wird von diesem Browser leider nicht unterstützt. Probier das GIF.';
+        shareStatus.textContent = t('videoUnsupported');
         updateShareAvailability();
         return;
       }
@@ -1738,14 +1744,14 @@ async function shareAnimated(kind) {
       filename = 'ab-ins-gruene-postkarte.' + (type.startsWith('video/mp4') ? 'mp4' : 'webm');
     }
   } catch (err) {
-    shareStatus.textContent = `Das ${label} konnte leider nicht erstellt werden.`;
+    shareStatus.textContent = t(kind === 'gif' ? 'gifFailed' : 'videoFailed');
     updateShareAvailability();
     return;
   }
   updateShareAvailability();
-  pendingShare = { kind, blob, filename, savedText: `${label} wurde gespeichert!` };
-  shareLabel.textContent = `${label} jetzt teilen`;
-  shareStatus.textContent = `${label} ist fertig. Tippe auf „${label} jetzt teilen“.`;
+  pendingShare = { kind, blob, filename, savedKey: kind === 'gif' ? 'savedGif' : 'savedVideo' };
+  shareLabel.textContent = t(kind === 'gif' ? 'gifShareNow' : 'videoShareNow');
+  shareStatus.textContent = t(kind === 'gif' ? 'gifReady' : 'videoReady');
 }
 
 function saveBlob(blob, filename) {
@@ -1761,7 +1767,7 @@ function saveBlob(blob, filename) {
 
 async function sharePostcard() {
   if (shareFormat === 'gif' || shareFormat === 'video') return shareAnimated(shareFormat);
-  const { canvas: source, filename, saved } = currentExport();
+  const { canvas: source, filename, savedKey } = currentExport();
   source.toBlob(async blob => {
     if (!blob) return;
     const file = new File([blob], filename, { type: 'image/png' });
@@ -1770,20 +1776,20 @@ async function sharePostcard() {
       try {
         await navigator.share({
           files: [file],
-          title: 'Meine Ab ins Grüne Postkarte',
+          title: t('shareTitle'),
           text: shareText()
         });
         shareStatus.textContent = '';
       } catch (err) {
         if (err.name !== 'AbortError') {
-          shareStatus.textContent = 'Teilen war leider nicht möglich.';
+          shareStatus.textContent = t('shareFailed');
         }
       }
       return;
     }
 
     saveBlob(blob, filename);
-    shareStatus.textContent = saved;
+    shareStatus.textContent = t(savedKey);
   }, 'image/png');
 }
 
@@ -1792,6 +1798,39 @@ fmtBoth.addEventListener('click', () => setShareFormat('both'));
 fmtStory.addEventListener('click', () => setShareFormat('story'));
 fmtGif.addEventListener('click', () => setShareFormat('gif'));
 fmtVideo.addEventListener('click', () => setShareFormat('video'));
+
+// ---------------- Sprache ----------------
+function updateStickerAria() {
+  stickerChoices.forEach(btn => {
+    const item = STICKERS.find(entry => entry.id === btn.dataset.sticker);
+    if (item) btn.setAttribute('aria-label', t('stickerAriaItem', { name: item.label }));
+  });
+}
+
+document.querySelectorAll('.lang-option').forEach(btn => {
+  btn.addEventListener('click', () => setLang(btn.dataset.lang, true));
+});
+
+// Sprachwechsel: Karte neu zeichnen (Texte stehen im Canvas), laufende
+// Meldungen verwerfen, offene Grossansicht und Teilen-Knopf aktualisieren.
+window.addEventListener('langchange', () => {
+  shareStatus.textContent = '';
+  updateStickerAria();
+  renderAll();
+  updateShareAvailability();
+  if (previewDialog.open && previewTarget) {
+    const list = previewTarget.kind === 'stamp' ? STAMPS : STICKERS;
+    const item = list.find(entry => entry.id === previewTarget.id);
+    if (item) {
+      previewTitle.textContent = itemLabel(previewTarget.kind, item);
+      previewImg.alt = previewTitle.textContent;
+    }
+    updatePreviewAction();
+  }
+});
+
+applyStaticTranslations();
+updateStickerAria();
 
 // ---------------- Init ----------------
 applyFormat('landscape');
